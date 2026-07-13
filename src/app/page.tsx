@@ -1,8 +1,16 @@
 "use client";
 
-import { Check, CircleDollarSign, HandCoins, Plus, ReceiptText, Users } from "lucide-react";
+import { Check, CircleDollarSign, HandCoins, Plus, ReceiptText, Trash2, Users } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { requestGraphql } from "@/lib/graphql-client";
 
@@ -63,12 +71,19 @@ const addExpenseMutation = /* GraphQL */ `
   }
 `;
 
+const deleteExpenseMutation = /* GraphQL */ `
+  mutation DeleteExpense($id: ID!) {
+    deleteExpense(id: $id) { id }
+  }
+`;
+
 export default function Home() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingPerson, setIsAddingPerson] = useState(false);
   const [isAddingExpense, setIsAddingExpense] = useState(false);
+  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
   const [personName, setPersonName] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -150,6 +165,20 @@ export default function Home() {
       setError(errorMessage(reason));
     } finally {
       setIsAddingExpense(false);
+    }
+  }
+
+  async function deleteExpense(expenseId: string) {
+    setError(null);
+    setDeletingExpenseId(expenseId);
+
+    try {
+      await requestGraphql(deleteExpenseMutation, { id: expenseId });
+      await refreshDashboard();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setDeletingExpenseId(null);
     }
   }
 
@@ -297,9 +326,37 @@ export default function Home() {
                       <h3 className="font-medium">{expense.description}</h3>
                       <p className="mt-1 text-sm text-muted-foreground">Paid by {expense.paidBy.name} · Split between {expense.shares.map((share) => share.person.name).join(", ")}</p>
                     </div>
-                    <div className="text-left sm:text-right">
-                      <p className="font-semibold">{formatMoney(expense.amountCents)}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{new Date(expense.createdAt).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</p>
+                    <div className="flex items-start gap-3 text-left sm:text-right">
+                      <div>
+                        <p className="font-semibold">{formatMoney(expense.amountCents)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{new Date(expense.createdAt).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</p>
+                      </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger
+                          type="button"
+                          className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                          aria-label={`Delete ${expense.description}`}
+                        >
+                          <Trash2 className="size-4" />
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogTitle className="text-lg font-semibold">Delete “{expense.description}”?</AlertDialogTitle>
+                          <AlertDialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
+                            This permanently removes the expense and its split details. Balances and settlement suggestions will be recalculated.
+                          </AlertDialogDescription>
+                          <div className="mt-6 flex justify-end gap-3">
+                            <AlertDialogCancel disabled={deletingExpenseId === expense.id}>Cancel</AlertDialogCancel>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              disabled={deletingExpenseId === expense.id}
+                              onClick={() => deleteExpense(expense.id)}
+                            >
+                              <Trash2 /> {deletingExpenseId === expense.id ? "Deleting…" : "Delete expense"}
+                            </Button>
+                          </div>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </article>
                 )) : <EmptyState message="No expenses recorded yet." />}
