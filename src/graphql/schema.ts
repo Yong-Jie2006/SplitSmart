@@ -1,4 +1,4 @@
-import { asc, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import { createSchema } from "graphql-yoga";
 import { z } from "zod";
@@ -48,6 +48,10 @@ const typeDefs = /* GraphQL */ `
     amountCents: Int!
   }
 
+  type DeletedExpense {
+    id: ID!
+  }
+
   input AddExpenseInput {
     description: String!
     amountCents: Int!
@@ -65,6 +69,7 @@ const typeDefs = /* GraphQL */ `
   type Mutation {
     addPerson(name: String!): Person!
     addExpense(input: AddExpenseInput!): Expense!
+    deleteExpense(id: ID!): DeletedExpense!
   }
 `;
 
@@ -160,6 +165,19 @@ export const schema = createSchema({
         });
 
         return toExpenseRecord(expense, peopleById, shares);
+      },
+      deleteExpense: async (_parent, args: { id: unknown }) => {
+        const expenseId = parseInput(personId, args.id);
+        const [deletedExpense] = await db
+          .delete(expenses)
+          .where(eq(expenses.id, expenseId))
+          .returning({ id: expenses.id });
+
+        if (!deletedExpense) {
+          throw userInputError("Expense not found.");
+        }
+
+        return deletedExpense;
       },
     },
   },
