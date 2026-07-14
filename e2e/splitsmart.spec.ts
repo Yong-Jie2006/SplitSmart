@@ -57,8 +57,9 @@ test("creates, switches, refreshes, and isolates expense sessions", async ({ pag
     payer: "Mei",
   });
 
-  await page.getByLabel("Expense session").selectOption({ label: "Bali Trip" });
+  await page.getByRole("button", { name: "Bali Trip", exact: true }).click();
   await expect(page).toHaveURL(baliUrl);
+  await expect(page.getByRole("heading", { name: "Bali Trip", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Bali hotel" })).toBeVisible();
   await expect(balanceRow(balances, "Ali")).toContainText(/\+RM\s*60\.00/);
 
@@ -66,26 +67,41 @@ test("creates, switches, refreshes, and isolates expense sessions", async ({ pag
   await page.getByRole("button", { name: "Delete expense" }).click();
   await expect(page.getByText("No expenses recorded yet.")).toBeVisible();
 
-  await page.getByLabel("Expense session").selectOption({ label: "Weekend Dinner" });
+  await page.getByRole("button", { name: "Weekend Dinner", exact: true }).click();
   await expect(page).toHaveURL(dinnerUrl);
+  await expect(page.getByRole("heading", { name: "Weekend Dinner", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Weekend meal" })).toBeVisible();
 
   await page.goto(baliUrl);
-  await expect(page.getByLabel("Expense session")).toHaveValue(
-    new URL(baliUrl).searchParams.get("session")!,
-  );
+  await expect(page.getByRole("button", { name: "Bali Trip", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "Bali Trip", level: 1 })).toBeVisible();
   await expect(page.getByText("No expenses recorded yet.")).toBeVisible();
 
   await page.goto(dinnerUrl);
+  await expect(page.getByRole("button", { name: "Weekend Dinner", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "Weekend meal" })).toBeVisible();
+});
+
+test("opens session navigation on a small screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: "Open session sidebar" }).click();
+
+  const sessionNavigation = page.getByRole("navigation", { name: "Expense sessions" });
+  await expect(sessionNavigation).toBeVisible();
+  await expect(page.getByRole("button", { name: "New session" })).toBeVisible();
+  await page.getByRole("button", { name: "Close session sidebar" }).click();
+  await expect(sessionNavigation).toBeHidden();
 });
 
 async function createSession(page: import("@playwright/test").Page, name: string) {
   await page.getByRole("button", { name: "New session" }).click();
   await page.getByLabel("Session name").fill(name);
   await page.getByRole("button", { name: "Create session" }).click();
-  await expect(page.getByLabel("Expense session")).toHaveValue(/\d+/);
-  await expect(page.getByLabel("Expense session").locator("option:checked")).toHaveText(name);
+  await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
 }
 
 async function addPerson(page: import("@playwright/test").Page, name: string) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, CircleDollarSign, HandCoins, Plus, ReceiptText, Trash2, Users } from "lucide-react";
+import { Check, CircleDollarSign, HandCoins, LayoutDashboard, Menu, Plus, ReceiptText, Trash2, Users, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -19,8 +19,8 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import { Sheet, SheetClose, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { requestGraphql } from "@/lib/graphql-client";
 
 type Person = {
@@ -135,6 +135,7 @@ export default function Home() {
   const [payerId, setPayerId] = useState("");
   const [participantIds, setParticipantIds] = useState<string[] | null>(null);
   const [isSessionDialogOpen, setIsSessionDialogOpen] = useState(false);
+  const [isSessionSidebarOpen, setIsSessionSidebarOpen] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [sessionName, setSessionName] = useState("");
 
@@ -325,78 +326,110 @@ export default function Home() {
     ? payerId
     : (people[0]?.id ?? "");
   const canAddExpense = people.length > 0 && selectedParticipantIds.length > 0;
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId);
 
   return (
-    <main className="min-h-screen bg-muted/40">
-      <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="mb-1 text-sm font-medium text-muted-foreground">Shared expenses, simplified</p>
-            <h1 className="text-3xl font-bold tracking-tight">SplitSmart</h1>
-          </div>
-          <div className="flex flex-col gap-2 sm:items-end">
-            <p className="text-sm text-muted-foreground">All amounts are in Malaysian ringgit (RM).</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="relative">
-                <span className="sr-only">Expense session</span>
-                <select
-                  className="h-9 min-w-44 appearance-none rounded-lg border bg-background py-1 pl-3 pr-9 text-sm font-medium outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                  value={selectedSessionId}
-                  onChange={(event) => void selectSession(event.target.value)}
-                  disabled={!sessions.length || isLoading}
-                  aria-label="Expense session"
-                >
-                  {sessions.map((session) => (
-                    <option key={session.id} value={session.id}>{session.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-2.5 size-4 text-muted-foreground" />
-              </label>
-              <Dialog open={isSessionDialogOpen} onOpenChange={setIsSessionDialogOpen}>
-                <DialogTrigger render={<Button type="button" variant="outline" />}>
-                  <Plus /> New session
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogTitle className="text-lg font-semibold">Create expense session</DialogTitle>
-                  <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
-                    Start a separate space for its own people, expenses, balances, and settlements.
-                  </DialogDescription>
-                  <form className="mt-5 space-y-5" onSubmit={createSession}>
-                    <label className="grid gap-1.5 text-sm font-medium">
-                      Session name
-                      <input
-                        className={inputClassName}
-                        value={sessionName}
-                        onChange={(event) => setSessionName(event.target.value)}
-                        placeholder="e.g. Bali Trip"
-                        maxLength={100}
-                        required
-                        autoFocus
-                      />
-                    </label>
-                    <div className="flex justify-end gap-3">
-                      <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
-                      <Button type="submit" disabled={isCreatingSession}>
-                        <Plus /> {isCreatingSession ? "Creating..." : "Create session"}
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
+    <main className="min-h-screen bg-muted/40 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <aside className="sticky top-0 hidden h-screen flex-col border-r bg-sidebar px-4 py-6 lg:flex">
+        <SessionNavigation
+          sessions={sessions}
+          selectedSessionId={selectedSessionId}
+          isLoading={isLoading}
+          onCreateSession={() => setIsSessionDialogOpen(true)}
+          onSelectSession={(sessionId) => void selectSession(sessionId)}
+        />
+      </aside>
+
+      <Sheet open={isSessionSidebarOpen} onOpenChange={setIsSessionSidebarOpen}>
+        <SheetContent className="p-4">
+          <SheetTitle className="sr-only">Expense sessions</SheetTitle>
+          <SessionNavigation
+            sessions={sessions}
+            selectedSessionId={selectedSessionId}
+            isLoading={isLoading}
+            onCreateSession={() => {
+              setIsSessionSidebarOpen(false);
+              setIsSessionDialogOpen(true);
+            }}
+            onSelectSession={(sessionId) => {
+              setIsSessionSidebarOpen(false);
+              void selectSession(sessionId);
+            }}
+            closeButton={(
+              <SheetClose
+                render={<Button type="button" variant="ghost" size="icon" />}
+                aria-label="Close session sidebar"
+              >
+                <X />
+              </SheetClose>
+            )}
+          />
+        </SheetContent>
+      </Sheet>
+
+      <div className="min-w-0">
+        <header className="border-b bg-background/95">
+          <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+            <div className="flex min-w-0 items-center gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="lg:hidden"
+                aria-label="Open session sidebar"
+                onClick={() => setIsSessionSidebarOpen(true)}
+              >
+                <Menu />
+              </Button>
+              <LayoutDashboard className="hidden size-4 shrink-0 text-muted-foreground sm:block" />
+              <h1 className="truncate text-lg font-semibold tracking-tight">
+                {selectedSession?.name ?? (isLoading ? "Loading session..." : "No session selected")}
+              </h1>
             </div>
+            <p className="hidden shrink-0 text-sm text-muted-foreground sm:block">All amounts are in RM</p>
           </div>
         </header>
 
-        {error ? (
-          <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
-            {error}
-          </div>
-        ) : null}
+        <Dialog open={isSessionDialogOpen} onOpenChange={setIsSessionDialogOpen}>
+          <DialogContent>
+            <DialogTitle className="text-lg font-semibold">Create expense session</DialogTitle>
+            <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
+              Start a separate space for its own people, expenses, balances, and settlements.
+            </DialogDescription>
+            <form className="mt-5 space-y-5" onSubmit={createSession}>
+              <label className="grid gap-1.5 text-sm font-medium">
+                Session name
+                <input
+                  className={inputClassName}
+                  value={sessionName}
+                  onChange={(event) => setSessionName(event.target.value)}
+                  placeholder="e.g. Bali Trip"
+                  maxLength={100}
+                  required
+                  autoFocus
+                />
+              </label>
+              <div className="flex justify-end gap-3">
+                <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+                <Button type="submit" disabled={isCreatingSession}>
+                  <Plus /> {isCreatingSession ? "Creating..." : "Create session"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
 
-        {isLoading ? (
+        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          {error ? (
+            <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+              {error}
+            </div>
+          ) : null}
+
+          {isLoading ? (
           <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground">Loading your group…</div>
-        ) : (
-          <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
             <section className="rounded-xl border bg-card p-5 shadow-sm">
               <SectionTitle icon={<Users />} title="People" subtitle="Add everyone sharing expenses." />
               <form className="mt-5 flex gap-2" onSubmit={addPerson}>
@@ -538,10 +571,88 @@ export default function Home() {
                 )) : <EmptyState message="No expenses recorded yet." />}
               </div>
             </section>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </main>
+  );
+}
+
+function SessionNavigation({
+  sessions,
+  selectedSessionId,
+  isLoading,
+  onCreateSession,
+  onSelectSession,
+  closeButton,
+}: {
+  sessions: ExpenseSession[];
+  selectedSessionId: string;
+  isLoading: boolean;
+  onCreateSession: () => void;
+  onSelectSession: (sessionId: string) => void;
+  closeButton?: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-start justify-between gap-3 px-1">
+        <div>
+          <p className="text-xl font-bold tracking-tight text-sidebar-foreground">SplitSmart</p>
+          <p className="mt-1 text-xs text-muted-foreground">Shared expenses, simplified</p>
+        </div>
+        {closeButton}
+      </div>
+
+      <Button type="button" className="mt-7 w-full" size="lg" onClick={onCreateSession}>
+        <Plus /> New session
+      </Button>
+
+      <nav className="mt-7 flex min-h-0 flex-1 flex-col" aria-label="Expense sessions">
+        <p className="px-2 text-[0.6875rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Sessions
+        </p>
+        <div className="mt-2 min-h-0 space-y-1 overflow-y-auto">
+          {sessions.length ? sessions.map((session) => {
+            const isActive = session.id === selectedSessionId;
+            return (
+              <button
+                key={session.id}
+                type="button"
+                className={[
+                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-sidebar-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+                  isActive
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                ].join(" ")}
+                aria-current={isActive ? "page" : undefined}
+                disabled={isLoading && !isActive}
+                onClick={() => {
+                  if (!isActive) {
+                    onSelectSession(session.id);
+                  }
+                }}
+              >
+                <span
+                  className={[
+                    "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                    isActive ? "border-sidebar-primary-foreground/50" : "border-sidebar-border",
+                  ].join(" ")}
+                  aria-hidden="true"
+                >
+                  <span className={isActive ? "size-1.5 rounded-full bg-sidebar-primary-foreground" : "size-1.5 rounded-full bg-muted-foreground/50"} />
+                </span>
+                <span className="truncate">{session.name}</span>
+              </button>
+            );
+          }) : (
+            <p className="px-3 py-3 text-sm leading-5 text-muted-foreground">
+              Create a session to start splitting expenses.
+            </p>
+          )}
+        </div>
+      </nav>
+    </div>
   );
 }
 
