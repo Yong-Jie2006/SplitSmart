@@ -1,0 +1,2 @@
+ALTER TABLE "expense_participants" ADD CONSTRAINT "expense_participants_share_cents_nonnegative" CHECK ("expense_participants"."share_cents" >= 0);--> statement-breakpoint
+ALTER TABLE "expenses" ADD CONSTRAINT "expenses_amount_cents_positive" CHECK ("expenses"."amount_cents" > 0);
