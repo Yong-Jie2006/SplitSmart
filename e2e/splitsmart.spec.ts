@@ -4,15 +4,14 @@ test("records, settles, and deletes an unevenly split expense", async ({ page })
   await page.goto("/");
 
   for (const name of ["Aisha", "Bee"]) {
-    await page.getByLabel("Person name").fill(name);
-    await page.getByRole("button", { name: "Add", exact: true }).click();
-    await expect(page.getByRole("checkbox", { name })).toBeVisible();
+    await addPerson(page, name);
   }
 
+  await page.getByRole("button", { name: "Add expense", exact: true }).click();
   await page.getByLabel("Description").fill("Dinner");
   await page.getByLabel("Amount (RM)").fill("10.01");
   await page.getByLabel("Paid by").selectOption({ label: "Aisha" });
-  await page.getByRole("button", { name: "Add expense" }).click();
+  await page.getByRole("button", { name: "Save expense" }).click();
 
   await expect(page.getByRole("heading", { name: "Dinner" })).toBeVisible();
   const settlement = page.getByText("Bee pays Aisha", { exact: true }).locator("..");
@@ -115,19 +114,22 @@ async function createSession(page: import("@playwright/test").Page, name: string
 }
 
 async function addPerson(page: import("@playwright/test").Page, name: string) {
+  await page.getByRole("button", { name: "Add person" }).click();
   await page.getByLabel("Person name").fill(name);
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.getByRole("checkbox", { name })).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(name, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Close people" }).click();
 }
 
 async function addExpense(
   page: import("@playwright/test").Page,
   expense: { description: string; amount: string; payer: string },
 ) {
+  await page.getByRole("button", { name: "Add expense", exact: true }).click();
   await page.getByLabel("Description").fill(expense.description);
   await page.getByLabel("Amount (RM)").fill(expense.amount);
   await page.getByLabel("Paid by").selectOption({ label: expense.payer });
-  await page.getByRole("button", { name: "Add expense" }).click();
+  await page.getByRole("button", { name: "Save expense" }).click();
   await expect(page.getByRole("heading", { name: expense.description })).toBeVisible();
 }
 

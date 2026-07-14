@@ -1,6 +1,19 @@
 "use client";
 
-import { Check, CircleDollarSign, HandCoins, LayoutDashboard, Menu, Plus, ReceiptText, Trash2, Users, X } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  CircleDollarSign,
+  HandCoins,
+  Menu,
+  Plus,
+  ReceiptText,
+  Trash2,
+  UserPlus,
+  Users,
+  WalletCards,
+  X,
+} from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -138,6 +151,8 @@ export default function Home() {
   const [isSessionSidebarOpen, setIsSessionSidebarOpen] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [sessionName, setSessionName] = useState("");
+  const [isPeopleDialogOpen, setIsPeopleDialogOpen] = useState(false);
+  const [isExpenseDialogOpen, setIsExpenseDialogOpen] = useState(false);
 
   async function refreshDashboard() {
     if (!selectedSessionId) {
@@ -208,6 +223,8 @@ export default function Home() {
     setParticipantIds(null);
     setError(null);
     setIsLoading(true);
+    setIsPeopleDialogOpen(false);
+    setIsExpenseDialogOpen(false);
     router.push(`${pathname}?session=${sessionId}`);
 
     try {
@@ -293,6 +310,8 @@ export default function Home() {
       });
       setDescription("");
       setAmount("");
+      setParticipantIds(null);
+      setIsExpenseDialogOpen(false);
       await refreshDashboardAndSessions();
     } catch (reason) {
       setError(errorMessage(reason));
@@ -330,6 +349,16 @@ export default function Home() {
     });
   }
 
+  function openPeopleDialog() {
+    setError(null);
+    setIsPeopleDialogOpen(true);
+  }
+
+  function openExpenseDialog() {
+    setError(null);
+    setIsExpenseDialogOpen(true);
+  }
+
   const people = dashboard?.people ?? [];
   const selectedParticipantIds = (participantIds ?? people.map((person) => person.id)).filter((id) =>
     people.some((person) => person.id === id),
@@ -339,9 +368,18 @@ export default function Home() {
     : (people[0]?.id ?? "");
   const canAddExpense = people.length > 0 && selectedParticipantIds.length > 0;
   const selectedSession = sessions.find((session) => session.id === selectedSessionId);
+  const totalSpentCents = dashboard?.expenses.reduce((total, expense) => total + expense.amountCents, 0) ?? 0;
+  const unsettledCents = dashboard?.balances.reduce(
+    (total, balance) => total + Math.max(balance.amountCents, 0),
+    0,
+  ) ?? 0;
+  const previewAmountCents = parseMoneyOrNull(amount);
+  const previewShares = previewAmountCents
+    ? splitPreview(previewAmountCents, selectedParticipantIds, people)
+    : [];
 
   return (
-    <main className="min-h-screen bg-muted/40 lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
+    <main className="min-h-screen bg-[#f7f8fa] lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
       <aside className="sticky top-0 hidden h-screen flex-col border-r bg-sidebar px-4 py-6 lg:flex">
         <SessionNavigation
           sessions={sessions}
@@ -380,8 +418,8 @@ export default function Home() {
       </Sheet>
 
       <div className="min-w-0">
-        <header className="border-b bg-background/95">
-          <div className="mx-auto flex min-h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur-xl">
+          <div className="mx-auto flex min-h-20 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
               <Button
                 type="button"
@@ -393,21 +431,48 @@ export default function Home() {
               >
                 <Menu />
               </Button>
-              <LayoutDashboard className="hidden size-4 shrink-0 text-muted-foreground sm:block" />
-              <h1 className="truncate text-lg font-semibold tracking-tight">
-                {selectedSession?.name ?? (isLoading ? "Loading session..." : "No session selected")}
-              </h1>
+              <div className="min-w-0">
+                <h1 className="truncate text-xl font-semibold tracking-[-0.025em] sm:text-2xl">
+                  {selectedSession?.name ?? (isLoading ? "Loading session..." : "No session selected")}
+                </h1>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground sm:text-sm">
+                  {people.length} {people.length === 1 ? "person" : "people"} · {dashboard?.expenses.length ?? 0} {dashboard?.expenses.length === 1 ? "expense" : "expenses"}
+                </p>
+              </div>
             </div>
-            <p className="hidden shrink-0 text-sm text-muted-foreground sm:block">All amounts are in RM</p>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              <PeopleStack people={people} onClick={openPeopleDialog} />
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="size-9 p-0 sm:h-9 sm:w-auto sm:px-2.5"
+                aria-label="Add person"
+                disabled={!selectedSessionId}
+                onClick={openPeopleDialog}
+              >
+                <UserPlus /> <span className="hidden sm:inline">Add person</span>
+              </Button>
+              <Button
+                type="button"
+                size="lg"
+                disabled={!canAddExpense}
+                onClick={openExpenseDialog}
+              >
+                <Plus /> <span className="hidden sm:inline">Add </span>expense
+              </Button>
+            </div>
           </div>
         </header>
 
         <Dialog open={isSessionDialogOpen} onOpenChange={setIsSessionDialogOpen}>
           <DialogContent>
-            <DialogTitle className="text-lg font-semibold">Create expense session</DialogTitle>
-            <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
-              Start a separate space for its own people, expenses, balances, and settlements.
-            </DialogDescription>
+            <DialogHeader
+              title="Create expense session"
+              description="Start a separate space for its own people, expenses, balances, and settlements."
+            />
+            {error ? <InlineError message={error} /> : null}
             <form className="mt-5 space-y-5" onSubmit={createSession}>
               <label className="grid gap-1.5 text-sm font-medium">
                 Session name
@@ -431,161 +496,383 @@ export default function Home() {
           </DialogContent>
         </Dialog>
 
-        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <Dialog open={isPeopleDialogOpen} onOpenChange={setIsPeopleDialogOpen}>
+          <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto">
+            <DialogHeader
+              title="People"
+              description={`Everyone sharing expenses in ${selectedSession?.name ?? "this session"}.`}
+            />
+            {error ? <InlineError message={error} /> : null}
+
+            <form className="mt-5 flex gap-2" onSubmit={addPerson}>
+              <label className="sr-only" htmlFor="person-name">Person name</label>
+              <input
+                id="person-name"
+                className={inputClassName}
+                value={personName}
+                onChange={(event) => setPersonName(event.target.value)}
+                placeholder="Enter a name"
+                maxLength={100}
+                required
+                autoFocus
+              />
+              <Button type="submit" size="lg" disabled={!selectedSessionId || isAddingPerson}>
+                <Plus /> {isAddingPerson ? "Adding" : "Add"}
+              </Button>
+            </form>
+
+            <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-medium">All people</p>
+                <span className="text-xs text-muted-foreground">{people.length} total</span>
+              </div>
+              <ul className="divide-y rounded-xl border bg-muted/20">
+                {people.length ? people.map((person) => (
+                  <li key={person.id} className="flex items-center gap-3 px-4 py-3.5">
+                    <Avatar person={person} />
+                    <span className="text-sm font-medium">{person.name}</span>
+                  </li>
+                )) : (
+                  <li className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    No people yet. Add the participants for this session to begin.
+                  </li>
+                )}
+              </ul>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isExpenseDialogOpen} onOpenChange={setIsExpenseDialogOpen}>
+          <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto">
+            <DialogHeader
+              title="Add an expense"
+              description="Record a purchase and choose exactly who should share it."
+            />
+            {error ? <InlineError message={error} /> : null}
+
+            <form className="mt-6 space-y-5" onSubmit={addExpense}>
+              <div className="grid gap-4 sm:grid-cols-[1fr_11rem]">
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Description
+                  <input
+                    className={inputClassName}
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder="e.g. Dinner"
+                    maxLength={200}
+                    required
+                    autoFocus
+                  />
+                </label>
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Amount (RM)
+                  <div className="relative">
+                    <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">RM</span>
+                    <input
+                      className={`${inputClassName} pl-10 font-medium tabular-nums`}
+                      value={amount}
+                      onChange={(event) => setAmount(event.target.value)}
+                      placeholder="0.00"
+                      inputMode="decimal"
+                      required
+                    />
+                  </div>
+                </label>
+              </div>
+
+              <label className="grid gap-1.5 text-sm font-medium">
+                Paid by
+                <select
+                  className={inputClassName}
+                  value={selectedPayerId}
+                  onChange={(event) => setPayerId(event.target.value)}
+                >
+                  {people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                </select>
+              </label>
+
+              <fieldset className="grid gap-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <legend className="text-sm font-medium">Split between</legend>
+                  <div className="flex gap-3 text-xs">
+                    <button
+                      type="button"
+                      className="font-medium text-primary hover:underline"
+                      onClick={() => setParticipantIds(people.map((person) => person.id))}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="font-medium text-muted-foreground hover:text-foreground hover:underline"
+                      onClick={() => setParticipantIds([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {people.map((person) => {
+                    const isSelected = selectedParticipantIds.includes(person.id);
+                    return (
+                      <label
+                        key={person.id}
+                        className={[
+                          "flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-3 text-sm transition-colors",
+                          isSelected ? "border-primary/25 bg-primary/[0.04]" : "hover:bg-muted/60",
+                        ].join(" ")}
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={isSelected}
+                          onChange={() => toggleParticipant(person.id)}
+                        />
+                        <Avatar person={person} size="sm" />
+                        <span className="font-medium">{person.name}</span>
+                        {isSelected ? <Check className="ml-auto size-4 text-primary" /> : null}
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              {previewShares.length ? (
+                <div className="rounded-xl border border-primary/10 bg-primary/[0.035] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium">Equal split preview</p>
+                    <p className="text-sm font-semibold tabular-nums">{formatMoney(previewAmountCents ?? 0)}</p>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {previewShares.map((share) => (
+                      <span key={share.person.id} className="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground">
+                        {share.person.name} <strong className="font-semibold text-foreground">{formatMoney(share.amountCents)}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:justify-end">
+                <DialogClose render={<Button type="button" variant="outline" size="lg" />}>Cancel</DialogClose>
+                <Button type="submit" size="lg" disabled={!canAddExpense || isAddingExpense}>
+                  <Plus /> {isAddingExpense ? "Saving expense..." : "Save expense"}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <div className="mx-auto w-full max-w-7xl px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:py-8">
           {error ? (
-            <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+            <div className="mb-6 rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive" role="alert">
               {error}
             </div>
           ) : null}
 
           {isLoading ? (
-          <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground">Loading your group…</div>
+            <DashboardSkeleton />
           ) : (
-            <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-            <section className="rounded-xl border bg-card p-5 shadow-sm">
-              <SectionTitle icon={<Users />} title="People" subtitle="Add everyone sharing expenses." />
-              <form className="mt-5 flex gap-2" onSubmit={addPerson}>
-                <input
-                  className={inputClassName}
-                  value={personName}
-                  onChange={(event) => setPersonName(event.target.value)}
-                  placeholder="e.g. Ali"
-                  maxLength={100}
-                  required
-                  aria-label="Person name"
+            <>
+              <section aria-label="Session summary" className="grid gap-3 sm:grid-cols-3 lg:gap-4">
+                <SummaryCard
+                  icon={<WalletCards />}
+                  label="Total spent"
+                  value={formatMoney(totalSpentCents)}
+                  tone="indigo"
                 />
-                <Button type="submit" disabled={!selectedSessionId || isAddingPerson}>
-                  <Plus /> {isAddingPerson ? "Adding" : "Add"}
-                </Button>
-              </form>
-              <ul className="mt-5 divide-y rounded-lg border">
-                {people.length ? people.map((person) => (
-                  <li key={person.id} className="flex items-center gap-3 px-3 py-3 text-sm font-medium">
-                    <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-xs text-primary">
-                      {initials(person.name)}
-                    </span>
-                    {person.name}
-                  </li>
-                )) : (
-                  <li className="px-3 py-6 text-center text-sm text-muted-foreground">No people yet. Add the participants for this session to begin.</li>
-                )}
-              </ul>
-            </section>
+                <SummaryCard
+                  icon={<CircleDollarSign />}
+                  label="Amount unsettled"
+                  value={formatMoney(unsettledCents)}
+                  tone="amber"
+                />
+                <SummaryCard
+                  icon={<HandCoins />}
+                  label="Payments needed"
+                  value={`${dashboard?.settlements.length ?? 0} ${dashboard?.settlements.length === 1 ? "payment" : "payments"}`}
+                  tone="blue"
+                />
+              </section>
 
-            <section className="rounded-xl border bg-card p-5 shadow-sm">
-              <SectionTitle icon={<ReceiptText />} title="Add an expense" subtitle="Every expense is split equally among selected people." />
-              <form className="mt-5 space-y-4" onSubmit={addExpense}>
-                <div className="grid gap-4 sm:grid-cols-[1fr_10rem]">
-                  <label className="grid gap-1.5 text-sm font-medium">
-                    Description
-                    <input className={inputClassName} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="e.g. Dinner" maxLength={200} required disabled={!people.length} />
-                  </label>
-                  <label className="grid gap-1.5 text-sm font-medium">
-                    Amount (RM)
-                    <input className={inputClassName} value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" inputMode="decimal" required disabled={!people.length} />
-                  </label>
-                </div>
-
-                <label className="grid gap-1.5 text-sm font-medium">
-                  Paid by
-                  <select className={inputClassName} value={selectedPayerId} onChange={(event) => setPayerId(event.target.value)} disabled={!people.length}>
-                    {people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-                  </select>
-                </label>
-
-                <fieldset className="grid gap-2">
-                  <legend className="text-sm font-medium">Split between</legend>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {people.map((person) => (
-                      <label key={person.id} className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted">
-                        <input type="checkbox" checked={selectedParticipantIds.includes(person.id)} onChange={() => toggleParticipant(person.id)} disabled={!people.length} />
-                        {person.name}
-                      </label>
-                    ))}
-                  </div>
-                  {!people.length ? <p className="text-sm text-muted-foreground">Add at least one person before recording an expense.</p> : null}
-                </fieldset>
-
-                <Button type="submit" className="w-full" size="lg" disabled={!canAddExpense || isAddingExpense}>
-                  <Plus /> {isAddingExpense ? "Saving expense…" : "Add expense"}
-                </Button>
-              </form>
-            </section>
-
-            <section className="rounded-xl border bg-card p-5 shadow-sm">
-              <SectionTitle icon={<CircleDollarSign />} title="Balances" subtitle="Positive means they should receive money." />
-              <div className="mt-5 space-y-3">
-                {dashboard?.balances.length ? dashboard.balances.map((balance) => (
-                  <div key={balance.person.id} className="flex items-center justify-between rounded-lg border px-3 py-3">
-                    <span className="font-medium">{balance.person.name}</span>
-                    <span className={balance.amountCents > 0 ? "font-semibold text-emerald-700" : balance.amountCents < 0 ? "font-semibold text-rose-700" : "font-semibold text-muted-foreground"}>
-                      {balance.amountCents > 0 ? "+" : ""}{formatMoney(balance.amountCents)}
-                    </span>
-                  </div>
-                )) : <EmptyState message="Balances will appear after your first expense." />}
-              </div>
-            </section>
-
-            <section className="rounded-xl border bg-card p-5 shadow-sm">
-              <SectionTitle icon={<HandCoins />} title="Settle up" subtitle="The fewest payments needed to clear all balances." />
-              <div className="mt-5 space-y-3">
-                {dashboard?.settlements.length ? dashboard.settlements.map((settlement, index) => (
-                  <div key={`${settlement.from.id}-${settlement.to.id}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-3 text-sm">
-                    <span><strong>{settlement.from.name}</strong> pays <strong>{settlement.to.name}</strong></span>
-                    <span className="shrink-0 font-semibold">{formatMoney(settlement.amountCents)}</span>
-                  </div>
-                )) : <EmptyState icon={<Check className="size-4" />} message={dashboard?.expenses.length ? "Everyone is settled up." : "Settlement suggestions will appear after expenses are added."} />}
-              </div>
-            </section>
-
-            <section className="rounded-xl border bg-card p-5 shadow-sm lg:col-span-2">
-              <SectionTitle icon={<ReceiptText />} title="Expense history" subtitle="The history of each expense made." />
-              <div className="mt-5 divide-y rounded-lg border">
-                {dashboard?.expenses.length ? dashboard.expenses.map((expense) => (
-                  <article key={expense.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <h3 className="font-medium">{expense.description}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">Paid by {expense.paidBy.name} · Split between {expense.shares.map((share) => share.person.name).join(", ")}</p>
-                    </div>
-                    <div className="flex items-start gap-3 text-left sm:text-right">
-                      <div>
-                        <p className="font-semibold">{formatMoney(expense.amountCents)}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{new Date(expense.createdAt).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</p>
-                      </div>
-                      <AlertDialog>
-                        <AlertDialogTrigger
-                          type="button"
-                          className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                          aria-label={`Delete ${expense.description}`}
+              {!people.length ? (
+                <section className="mt-6 rounded-2xl border border-dashed bg-card px-6 py-12 text-center shadow-sm">
+                  <span className="mx-auto flex size-11 items-center justify-center rounded-xl bg-primary/8 text-primary">
+                    <Users className="size-5" />
+                  </span>
+                  <h2 className="mt-4 text-lg font-semibold">Add your group to get started</h2>
+                  <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
+                    Add the people sharing expenses. Then you can record purchases and SplitSmart will calculate the balances.
+                  </p>
+                  <Button type="button" size="lg" className="mt-5" onClick={openPeopleDialog}>
+                    <UserPlus /> Add first person
+                  </Button>
+                  <p className="mt-4 text-sm text-muted-foreground">No people yet. Add the participants for this session to begin.</p>
+                </section>
+              ) : (
+                <div className="mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.85fr)]">
+                  <section className="overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+                    <SectionHeading
+                      title="Recent expenses"
+                      subtitle="Every shared purchase in this session."
+                      action={`${dashboard?.expenses.length ?? 0} total`}
+                    />
+                    <div className="border-t">
+                      {dashboard?.expenses.length ? dashboard.expenses.map((expense) => (
+                        <article
+                          key={expense.id}
+                          className="group flex items-start gap-3 border-b px-4 py-4 last:border-b-0 hover:bg-muted/25 sm:items-center sm:px-5"
                         >
-                          <Trash2 className="size-4" />
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogTitle className="text-lg font-semibold">Delete “{expense.description}”?</AlertDialogTitle>
-                          <AlertDialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
-                            This permanently removes the expense and its split details. Balances and settlement suggestions will be recalculated.
-                          </AlertDialogDescription>
-                          <div className="mt-6 flex justify-end gap-3">
-                            <AlertDialogCancel disabled={deletingExpenseId === expense.id}>Cancel</AlertDialogCancel>
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              disabled={deletingExpenseId === expense.id}
-                              onClick={() => deleteExpense(expense.id)}
-                            >
-                              <Trash2 /> {deletingExpenseId === expense.id ? "Deleting…" : "Delete expense"}
-                            </Button>
+                          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
+                            <ReceiptText className="size-4" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="truncate text-sm font-semibold">{expense.description}</h3>
+                            <p className="mt-1 truncate text-xs text-muted-foreground sm:text-sm">
+                              Paid by {expense.paidBy.name} · {expense.shares.length} {expense.shares.length === 1 ? "person" : "people"} · {formatDate(expense.createdAt)}
+                            </p>
                           </div>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                          <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+                            <p className="text-sm font-semibold tabular-nums sm:text-base">{formatMoney(expense.amountCents)}</p>
+                            <AlertDialog>
+                              <AlertDialogTrigger
+                                type="button"
+                                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-70 transition-all hover:bg-destructive/10 hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                                aria-label={`Delete ${expense.description}`}
+                              >
+                                <Trash2 className="size-4" />
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogTitle className="text-lg font-semibold">Delete “{expense.description}”?</AlertDialogTitle>
+                                <AlertDialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
+                                  This permanently removes the expense and its split details. Balances and settlement suggestions will be recalculated.
+                                </AlertDialogDescription>
+                                <div className="mt-6 flex justify-end gap-3">
+                                  <AlertDialogCancel disabled={deletingExpenseId === expense.id}>Cancel</AlertDialogCancel>
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={deletingExpenseId === expense.id}
+                                    onClick={() => deleteExpense(expense.id)}
+                                  >
+                                    <Trash2 /> {deletingExpenseId === expense.id ? "Deleting..." : "Delete expense"}
+                                  </Button>
+                                </div>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </article>
+                      )) : (
+                        <EmptyState
+                          icon={<ReceiptText className="size-5" />}
+                          title="No expenses recorded yet."
+                          message="Add the first expense to start calculating balances."
+                          action={(
+                            <Button type="button" onClick={openExpenseDialog}>
+                              <Plus /> Add first expense
+                            </Button>
+                          )}
+                        />
+                      )}
                     </div>
-                  </article>
-                )) : <EmptyState message="No expenses recorded yet." />}
-              </div>
-            </section>
-            </div>
+                  </section>
+
+                  <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-1">
+                    <section className="overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+                      <SectionHeading
+                        title="Balances"
+                        subtitle="Who owes and who gets money back."
+                      />
+                      <div className="divide-y border-t">
+                        {dashboard?.balances.length ? dashboard.balances.map((balance) => {
+                          const status = balance.amountCents > 0
+                            ? "gets back"
+                            : balance.amountCents < 0
+                              ? "owes"
+                              : "settled";
+                          return (
+                            <div key={balance.person.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+                              <Avatar person={balance.person} />
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium">{balance.person.name}</span>
+                              <div className="text-right">
+                                <p className={[
+                                  "text-xs font-medium",
+                                  balance.amountCents > 0
+                                    ? "text-emerald-700"
+                                    : balance.amountCents < 0
+                                      ? "text-rose-600"
+                                      : "text-muted-foreground",
+                                ].join(" ")}>{status}</p>
+                                <p className={[
+                                  "mt-0.5 text-sm font-semibold tabular-nums",
+                                  balance.amountCents > 0
+                                    ? "text-emerald-700"
+                                    : balance.amountCents < 0
+                                      ? "text-rose-600"
+                                      : "text-muted-foreground",
+                                ].join(" ")}>
+                                  {balance.amountCents > 0 ? "+" : balance.amountCents < 0 ? "-" : ""}{formatMoney(Math.abs(balance.amountCents))}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        }) : (
+                          <EmptyState title="No balances yet" message="Balances appear after your first expense." />
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="overflow-hidden rounded-2xl border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+                      <SectionHeading
+                        title="Settle up"
+                        subtitle="The fewest payments to clear every balance."
+                      />
+                      <div className="divide-y border-t">
+                        {dashboard?.settlements.length ? dashboard.settlements.map((settlement, index) => (
+                          <div
+                            key={`${settlement.from.id}-${settlement.to.id}-${index}`}
+                            className="flex items-center gap-2 px-4 py-4 sm:px-5"
+                          >
+                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                              <Avatar person={settlement.from} size="sm" />
+                              <span className="truncate text-sm font-medium">{settlement.from.name}</span>
+                              <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+                              <Avatar person={settlement.to} size="sm" />
+                              <span className="truncate text-sm font-medium">{settlement.to.name}</span>
+                              <span className="sr-only">{settlement.from.name} pays {settlement.to.name}</span>
+                            </div>
+                            <span className="shrink-0 text-sm font-semibold tabular-nums">{formatMoney(settlement.amountCents)}</span>
+                          </div>
+                        )) : (
+                          <EmptyState
+                            icon={<Check className="size-5" />}
+                            title={dashboard?.expenses.length ? "Everyone is settled up" : "Nothing to settle yet"}
+                            message={dashboard?.expenses.length
+                              ? "No payments are needed right now."
+                              : "Suggestions appear after expenses are added."}
+                          />
+                        )}
+                      </div>
+                    </section>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
+
+        {people.length ? (
+          <div className="fixed inset-x-4 bottom-4 z-20 lg:hidden">
+            <Button
+              type="button"
+              size="lg"
+              className="h-11 w-full shadow-lg"
+              onClick={openExpenseDialog}
+            >
+              <Plus /> Add expense
+            </Button>
+          </div>
+        ) : null}
       </div>
     </main>
   );
@@ -668,20 +955,177 @@ function SessionNavigation({
   );
 }
 
-function SectionTitle({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
+function DialogHeader({ title, description }: { title: string; description: string }) {
   return (
-    <div className="flex gap-3">
-      <span className="mt-0.5 text-primary">{icon}</span>
+    <div className="flex items-start justify-between gap-4 pr-1">
       <div>
-        <h2 className="font-semibold">{title}</h2>
-        <p className="mt-0.5 text-sm text-muted-foreground">{subtitle}</p>
+        <DialogTitle className="text-xl font-semibold tracking-tight">{title}</DialogTitle>
+        <DialogDescription className="mt-1.5 text-sm leading-6 text-muted-foreground">
+          {description}
+        </DialogDescription>
       </div>
+      <DialogClose
+        render={<Button type="button" variant="ghost" size="icon" />}
+        aria-label={`Close ${title.toLowerCase()}`}
+      >
+        <X />
+      </DialogClose>
     </div>
   );
 }
 
-function EmptyState({ icon, message }: { icon?: React.ReactNode; message: string }) {
-  return <p className="flex items-center justify-center gap-2 px-3 py-7 text-center text-sm text-muted-foreground">{icon}{message}</p>;
+function InlineError({ message }: { message: string }) {
+  return (
+    <p className="mt-4 rounded-lg border border-destructive/20 bg-destructive/8 px-3 py-2 text-sm text-destructive" role="alert">
+      {message}
+    </p>
+  );
+}
+
+function PeopleStack({ people, onClick }: { people: Person[]; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="hidden items-center rounded-full p-1 outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 md:flex"
+      aria-label={`View and manage ${people.length} ${people.length === 1 ? "person" : "people"}`}
+      onClick={onClick}
+    >
+      {people.length ? (
+        <>
+          <span className="flex -space-x-2">
+            {people.slice(0, 4).map((person) => (
+              <Avatar key={person.id} person={person} className="ring-2 ring-background" />
+            ))}
+          </span>
+          {people.length > 4 ? (
+            <span className="-ml-1 flex size-8 items-center justify-center rounded-full border bg-muted text-[0.6875rem] font-semibold text-muted-foreground ring-2 ring-background">
+              +{people.length - 4}
+            </span>
+          ) : null}
+        </>
+      ) : (
+        <span className="flex size-8 items-center justify-center rounded-full border bg-muted text-muted-foreground">
+          <Users className="size-4" />
+        </span>
+      )}
+    </button>
+  );
+}
+
+function Avatar({
+  person,
+  size = "md",
+  className = "",
+}: {
+  person: Person;
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  return (
+    <span
+      className={[
+        "flex shrink-0 items-center justify-center rounded-full border font-semibold",
+        size === "sm" ? "size-7 text-[0.625rem]" : "size-8 text-[0.6875rem]",
+        avatarClassName(person.name),
+        className,
+      ].join(" ")}
+      aria-hidden="true"
+    >
+      {initials(person.name)}
+    </span>
+  );
+}
+
+function SummaryCard({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone: "indigo" | "amber" | "blue";
+}) {
+  const tones = {
+    indigo: "bg-indigo-50 text-indigo-700",
+    amber: "bg-amber-50 text-amber-700",
+    blue: "bg-blue-50 text-blue-700",
+  };
+
+  return (
+    <article className="flex items-center gap-4 rounded-2xl border bg-card p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] sm:p-5">
+      <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl [&_svg]:size-5 ${tones[tone]}`}>
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium text-muted-foreground sm:text-sm">{label}</p>
+        <p className="mt-1 truncate text-lg font-semibold tracking-[-0.02em] tabular-nums sm:text-xl">{value}</p>
+      </div>
+    </article>
+  );
+}
+
+function SectionHeading({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  subtitle: string;
+  action?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-5 sm:py-5">
+      <div>
+        <h2 className="font-semibold tracking-tight">{title}</h2>
+        <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{subtitle}</p>
+      </div>
+      {action ? <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{action}</span> : null}
+    </div>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  message,
+  action,
+}: {
+  icon?: React.ReactNode;
+  title: string;
+  message: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="px-5 py-10 text-center">
+      {icon ? (
+        <span className="mx-auto flex size-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+          {icon}
+        </span>
+      ) : null}
+      <p className={`${icon ? "mt-3" : ""} text-sm font-medium`}>{title}</p>
+      <p className="mx-auto mt-1 max-w-xs text-xs leading-5 text-muted-foreground">{message}</p>
+      {action ? <div className="mt-4">{action}</div> : null}
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="animate-pulse" aria-label="Loading dashboard">
+      <div className="grid gap-3 sm:grid-cols-3 lg:gap-4">
+        {[0, 1, 2].map((item) => <div key={item} className="h-24 rounded-2xl border bg-card" />)}
+      </div>
+      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,0.85fr)]">
+        <div className="h-96 rounded-2xl border bg-card" />
+        <div className="grid gap-6">
+          <div className="h-64 rounded-2xl border bg-card" />
+          <div className="h-56 rounded-2xl border bg-card" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function moneyToCents(value: string): number {
@@ -701,6 +1145,30 @@ function moneyToCents(value: string): number {
   return amountCents;
 }
 
+function parseMoneyOrNull(value: string): number | null {
+  try {
+    return moneyToCents(value);
+  } catch {
+    return null;
+  }
+}
+
+function splitPreview(amountCents: number, participantIds: string[], people: Person[]) {
+  const participants = participantIds
+    .map((personId) => people.find((person) => person.id === personId))
+    .filter((person): person is Person => Boolean(person));
+  if (!participants.length) {
+    return [];
+  }
+
+  const baseShare = Math.floor(amountCents / participants.length);
+  const remainder = amountCents % participants.length;
+  return participants.map((person, index) => ({
+    person,
+    amountCents: baseShare + (index < remainder ? 1 : 0),
+  }));
+}
+
 function formatMoney(amountCents: number): string {
   return new Intl.NumberFormat("en-MY", {
     style: "currency",
@@ -708,12 +1176,32 @@ function formatMoney(amountCents: number): string {
   }).format(amountCents / 100);
 }
 
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("en-MY", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function initials(name: string): string {
   return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function avatarClassName(name: string): string {
+  const palette = [
+    "border-indigo-100 bg-indigo-50 text-indigo-700",
+    "border-emerald-100 bg-emerald-50 text-emerald-700",
+    "border-amber-100 bg-amber-50 text-amber-700",
+    "border-rose-100 bg-rose-50 text-rose-700",
+    "border-sky-100 bg-sky-50 text-sky-700",
+  ];
+  const value = Array.from(name).reduce((total, character) => total + character.charCodeAt(0), 0);
+  return palette[value % palette.length];
 }
 
 function errorMessage(reason: unknown): string {
   return reason instanceof Error ? reason.message : "Something went wrong. Please try again.";
 }
 
-const inputClassName = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
+const inputClassName = "h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";

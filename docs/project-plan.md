@@ -13,3 +13,4 @@
 - [x] Verify the complete multi-session flow with Playwright and final checks.
 - [x] Replace the compact session selector with a responsive sidebar and active-session page heading.
 - [x] Order sessions by persisted recent activity and refresh the sidebar after dashboard mutations.
+- [x] Refocus the main UI around summary metrics, expense history, readable balances, and dialog-based people and expense workflows.
