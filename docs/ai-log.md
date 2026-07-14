@@ -6,3 +6,4 @@
 - Database `CHECK` constraints now reject non-positive expenses and negative participant shares, even if application validation is bypassed.
 - Browser tests must use a separate database; the Playwright configuration refuses to start without `DATABASE_URL_TEST`.
 - The settlement algorithm is exact but may need a group-size limit before the app supports larger groups.
+- Drizzle generated required session columns immediately, which would fail on populated tables; the migration was reordered to backfill a Default session before applying `NOT NULL`.
