@@ -787,9 +787,9 @@ export default function Home() {
                       <div className="divide-y border-t">
                         {dashboard?.balances.length ? dashboard.balances.map((balance) => {
                           const status = balance.amountCents > 0
-                            ? "gets back"
+                            ? "to get"
                             : balance.amountCents < 0
-                              ? "owes"
+                              ? "to pay"
                               : "settled";
                           return (
                             <div key={balance.person.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
