@@ -46,16 +46,22 @@ type Dashboard = {
   settlements: Settlement[];
 };
 
+type DashboardResponse = {
+  dashboard: Dashboard;
+};
+
 const dashboardQuery = /* GraphQL */ `
   query Dashboard {
-    people { id name }
-    expenses {
-      id description amountCents createdAt
-      paidBy { id name }
-      shares { person { id name } amountCents }
+    dashboard {
+      people { id name }
+      expenses {
+        id description amountCents createdAt
+        paidBy { id name }
+        shares { person { id name } amountCents }
+      }
+      balances { person { id name } amountCents }
+      settlements { from { id name } to { id name } amountCents }
     }
-    balances { person { id name } amountCents }
-    settlements { from { id name } to { id name } amountCents }
   }
 `;
 
@@ -91,17 +97,17 @@ export default function Home() {
   const [participantIds, setParticipantIds] = useState<string[] | null>(null);
 
   async function refreshDashboard() {
-    const nextDashboard = await requestGraphql<Dashboard>(dashboardQuery);
-    setDashboard(nextDashboard);
+    const response = await requestGraphql<DashboardResponse>(dashboardQuery);
+    setDashboard(response.dashboard);
   }
 
   useEffect(() => {
     let isCurrent = true;
 
-    void requestGraphql<Dashboard>(dashboardQuery)
-      .then((nextDashboard) => {
+    void requestGraphql<DashboardResponse>(dashboardQuery)
+      .then((response) => {
         if (isCurrent) {
-          setDashboard(nextDashboard);
+          setDashboard(response.dashboard);
         }
       })
       .catch((reason: unknown) => {

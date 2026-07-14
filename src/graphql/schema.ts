@@ -52,6 +52,13 @@ const typeDefs = /* GraphQL */ `
     id: ID!
   }
 
+  type Dashboard {
+    people: [Person!]!
+    expenses: [Expense!]!
+    balances: [Balance!]!
+    settlements: [Settlement!]!
+  }
+
   input AddExpenseInput {
     description: String!
     amountCents: Int!
@@ -60,10 +67,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Query {
-    people: [Person!]!
-    expenses: [Expense!]!
-    balances: [Balance!]!
-    settlements: [Settlement!]!
+    dashboard: Dashboard!
   }
 
   type Mutation {
@@ -106,14 +110,22 @@ type ExpenseRecord = {
   shares: Array<{ person: PersonRecord; amountCents: number }>;
 };
 
+type DashboardRecord = {
+  people: PersonRecord[];
+  expenses: ExpenseRecord[];
+  balances: Array<{ person: PersonRecord; amountCents: number }>;
+  settlements: Array<{
+    from: PersonRecord;
+    to: PersonRecord;
+    amountCents: number;
+  }>;
+};
+
 export const schema = createSchema({
   typeDefs,
   resolvers: {
     Query: {
-      people: listPeople,
-      expenses: listExpenses,
-      balances: listBalances,
-      settlements: listSettlements,
+      dashboard: getDashboard,
     },
     Mutation: {
       addPerson: async (_parent, args: { name: unknown }) => {
@@ -183,79 +195,70 @@ export const schema = createSchema({
   },
 });
 
-async function listPeople(): Promise<PersonRecord[]> {
-  return db.select().from(people).orderBy(asc(people.id));
-}
+async function getDashboard(): Promise<DashboardRecord> {
+  return db.transaction(async (tx) => {
+    const [personRows, expenseRows, shareRows] = await Promise.all([
+      tx.select().from(people).orderBy(asc(people.id)),
+      tx.select().from(expenses).orderBy(asc(expenses.id)),
+      tx
+        .select()
+        .from(expenseParticipants)
+        .orderBy(asc(expenseParticipants.expenseId), asc(expenseParticipants.personId)),
+    ]);
+    const peopleById = new Map(personRows.map((person) => [person.id, person]));
+    const sharesByExpenseId = new Map<number, ExpenseShare[]>();
 
-async function listExpenses(): Promise<ExpenseRecord[]> {
-  const [personRows, expenseRows, shareRows] = await Promise.all([
-    listPeople(),
-    db.select().from(expenses).orderBy(asc(expenses.id)),
-    db
-      .select()
-      .from(expenseParticipants)
-      .orderBy(asc(expenseParticipants.expenseId), asc(expenseParticipants.personId)),
-  ]);
-  const peopleById = new Map(personRows.map((person) => [person.id, person]));
-  const sharesByExpenseId = new Map<number, ExpenseShare[]>();
+    for (const share of shareRows) {
+      const expenseShares = sharesByExpenseId.get(share.expenseId) ?? [];
+      expenseShares.push({
+        personId: share.personId,
+        amountCents: share.shareCents,
+      });
+      sharesByExpenseId.set(share.expenseId, expenseShares);
+    }
 
-  for (const share of shareRows) {
-    const expenseShares = sharesByExpenseId.get(share.expenseId) ?? [];
-    expenseShares.push({
-      personId: share.personId,
-      amountCents: share.shareCents,
-    });
-    sharesByExpenseId.set(share.expenseId, expenseShares);
-  }
-
-  return expenseRows.map((expense) =>
-    toExpenseRecord(
-      expense,
-      peopleById,
-      sharesByExpenseId.get(expense.id) ?? [],
-    ),
-  );
-}
-
-async function listBalances() {
-  const [personRows, expenseRecords] = await Promise.all([
-    listPeople(),
-    listExpenses(),
-  ]);
-  const peopleById = new Map(personRows.map((person) => [person.id, person]));
-  const balances = calculateBalances(
-    personRows.map((person) => person.id),
-    expenseRecords.map((expense) => ({
-      amountCents: expense.amountCents,
-      paidByPersonId: expense.paidBy.id,
-      shares: expense.shares.map((share) => ({
-        personId: share.person.id,
-        amountCents: share.amountCents,
+    const expenseRecords = expenseRows.map((expense) =>
+      toExpenseRecord(
+        expense,
+        peopleById,
+        sharesByExpenseId.get(expense.id) ?? [],
+      ),
+    );
+    const balances = calculateBalances(
+      personRows.map((person) => person.id),
+      expenseRecords.map((expense) => ({
+        amountCents: expense.amountCents,
+        paidByPersonId: expense.paidBy.id,
+        shares: expense.shares.map((share) => ({
+          personId: share.person.id,
+          amountCents: share.amountCents,
+        })),
       })),
-    })),
-  );
-
-  return balances.map((balance) => ({
-    person: peopleById.get(balance.personId)!,
-    amountCents: balance.amountCents,
-  }));
-}
-
-async function listSettlements() {
-  const [personRows, balances] = await Promise.all([listPeople(), listBalances()]);
-  const peopleById = new Map(personRows.map((person) => [person.id, person]));
-  const settlements = calculateSettlements(
-    balances.map((balance) => ({
-      personId: balance.person.id,
+    ).map((balance) => ({
+      person: peopleById.get(balance.personId)!,
       amountCents: balance.amountCents,
-    })),
-  );
+    }));
+    const settlements = calculateSettlements(
+      balances.map((balance) => ({
+        personId: balance.person.id,
+        amountCents: balance.amountCents,
+      })),
+    ).map((settlement) => ({
+      from: peopleById.get(settlement.fromPersonId)!,
+      to: peopleById.get(settlement.toPersonId)!,
+      amountCents: settlement.amountCents,
+    }));
 
-  return settlements.map((settlement) => ({
-    from: peopleById.get(settlement.fromPersonId)!,
-    to: peopleById.get(settlement.toPersonId)!,
-    amountCents: settlement.amountCents,
-  }));
+    return {
+      people: personRows,
+      expenses: expenseRecords,
+      balances,
+      settlements,
+    };
+  }, {
+    isolationLevel: "repeatable read",
+    accessMode: "read only",
+  });
 }
 
 function toExpenseRecord(
