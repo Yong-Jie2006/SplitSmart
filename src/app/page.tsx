@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, CircleDollarSign, HandCoins, Plus, ReceiptText, Trash2, Users } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import {
   AlertDialog,
@@ -86,6 +86,7 @@ const deleteExpenseMutation = /* GraphQL */ `
 export default function Home() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [amountError, setAmountError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingPerson, setIsAddingPerson] = useState(false);
   const [isAddingExpense, setIsAddingExpense] = useState(false);
@@ -95,6 +96,7 @@ export default function Home() {
   const [amount, setAmount] = useState("");
   const [payerId, setPayerId] = useState("");
   const [participantIds, setParticipantIds] = useState<string[] | null>(null);
+  const amountInputRef = useRef<HTMLInputElement>(null);
 
   async function refreshDashboard() {
     const response = await requestGraphql<DashboardResponse>(dashboardQuery);
@@ -145,12 +147,14 @@ export default function Home() {
   async function addExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setAmountError(null);
 
     let amountCents: number;
     try {
       amountCents = moneyToCents(amount);
     } catch (reason) {
-      setError(errorMessage(reason));
+      setAmountError(errorMessage(reason));
+      amountInputRef.current?.focus();
       return;
     }
 
@@ -265,9 +269,26 @@ export default function Home() {
                     Description
                     <input className={inputClassName} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="e.g. Dinner" maxLength={200} required disabled={!people.length} />
                   </label>
-                  <label className="grid gap-1.5 text-sm font-medium">
+                  <label className="grid content-start gap-1.5 text-sm font-medium" htmlFor="expense-amount">
                     Amount (RM)
-                    <input className={inputClassName} value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" inputMode="decimal" required disabled={!people.length} />
+                    <input
+                      ref={amountInputRef}
+                      id="expense-amount"
+                      className={`${inputClassName} ${amountError ? "border-destructive focus-visible:border-destructive focus-visible:ring-destructive/20" : ""}`}
+                      value={amount}
+                      onChange={(event) => setAmount(event.target.value)}
+                      placeholder="0.00"
+                      inputMode="decimal"
+                      required
+                      disabled={!people.length}
+                      aria-invalid={amountError ? true : undefined}
+                      aria-describedby={amountError ? "expense-amount-error" : undefined}
+                    />
+                    {amountError ? (
+                      <p id="expense-amount-error" className="text-sm font-normal text-destructive">
+                        {amountError}
+                      </p>
+                    ) : null}
                   </label>
                 </div>
 
