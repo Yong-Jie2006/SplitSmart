@@ -101,20 +101,20 @@ const createSessionMutation = /* GraphQL */ `
 `;
 
 const addPersonMutation = /* GraphQL */ `
-  mutation AddPerson($name: String!) {
-    addPerson(name: $name) { id name }
+  mutation AddPerson($sessionId: ID!, $name: String!) {
+    addPerson(sessionId: $sessionId, name: $name) { id name }
   }
 `;
 
 const addExpenseMutation = /* GraphQL */ `
-  mutation AddExpense($input: AddExpenseInput!) {
-    addExpense(input: $input) { id }
+  mutation AddExpense($sessionId: ID!, $input: AddExpenseInput!) {
+    addExpense(sessionId: $sessionId, input: $input) { id }
   }
 `;
 
 const deleteExpenseMutation = /* GraphQL */ `
-  mutation DeleteExpense($id: ID!) {
-    deleteExpense(id: $id) { id }
+  mutation DeleteExpense($sessionId: ID!, $id: ID!) {
+    deleteExpense(sessionId: $sessionId, id: $id) { id }
   }
 `;
 
@@ -232,11 +232,17 @@ export default function Home() {
 
   async function addPerson(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selectedSessionId) {
+      return;
+    }
     setError(null);
     setIsAddingPerson(true);
 
     try {
-      await requestGraphql(addPersonMutation, { name: personName });
+      await requestGraphql(addPersonMutation, {
+        sessionId: selectedSessionId,
+        name: personName,
+      });
       setPersonName("");
       await refreshDashboard();
     } catch (reason) {
@@ -248,6 +254,9 @@ export default function Home() {
 
   async function addExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selectedSessionId) {
+      return;
+    }
     setError(null);
 
     let amountCents: number;
@@ -261,6 +270,7 @@ export default function Home() {
     setIsAddingExpense(true);
     try {
       await requestGraphql(addExpenseMutation, {
+        sessionId: selectedSessionId,
         input: {
           description,
           amountCents,
@@ -279,11 +289,17 @@ export default function Home() {
   }
 
   async function deleteExpense(expenseId: string) {
+    if (!selectedSessionId) {
+      return;
+    }
     setError(null);
     setDeletingExpenseId(expenseId);
 
     try {
-      await requestGraphql(deleteExpenseMutation, { id: expenseId });
+      await requestGraphql(deleteExpenseMutation, {
+        sessionId: selectedSessionId,
+        id: expenseId,
+      });
       await refreshDashboard();
     } catch (reason) {
       setError(errorMessage(reason));
@@ -393,7 +409,7 @@ export default function Home() {
                   required
                   aria-label="Person name"
                 />
-                <Button type="submit" disabled={isAddingPerson}>
+                <Button type="submit" disabled={!selectedSessionId || isAddingPerson}>
                   <Plus /> {isAddingPerson ? "Adding" : "Add"}
                 </Button>
               </form>
@@ -406,7 +422,7 @@ export default function Home() {
                     {person.name}
                   </li>
                 )) : (
-                  <li className="px-3 py-6 text-center text-sm text-muted-foreground">Add your first person to begin.</li>
+                  <li className="px-3 py-6 text-center text-sm text-muted-foreground">No people yet. Add the participants for this session to begin.</li>
                 )}
               </ul>
             </section>

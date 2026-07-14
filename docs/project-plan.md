@@ -9,5 +9,5 @@
 - [x] Scope the GraphQL API and correctness checks to a selected session.
 - [x] Cover session isolation with API integration tests.
 - [x] Add a URL-backed session switcher and new-session dialog.
-- [ ] Scope every dashboard action and state to the selected session.
+- [x] Scope every dashboard action and state to the selected session.
 - [ ] Verify the complete multi-session flow with Playwright and final checks.
