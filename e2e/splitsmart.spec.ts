@@ -63,7 +63,17 @@ test("creates, switches, refreshes, and isolates expense sessions", async ({ pag
   await expect(page.getByRole("heading", { name: "Bali hotel" })).toBeVisible();
   await expect(balanceRow(balances, "Ali")).toContainText(/\+RM\s*60\.00/);
 
+  await addExpense(page, {
+    description: "Bali taxi",
+    amount: "30.00",
+    payer: "Ali",
+  });
+  const sessionNavigation = page.getByRole("navigation", { name: "Expense sessions" });
+  await expect(sessionNavigation.getByRole("button").first()).toHaveText("Bali Trip");
+
   await page.getByRole("button", { name: "Delete Bali hotel" }).click();
+  await page.getByRole("button", { name: "Delete expense" }).click();
+  await page.getByRole("button", { name: "Delete Bali taxi" }).click();
   await page.getByRole("button", { name: "Delete expense" }).click();
   await expect(page.getByText("No expenses recorded yet.")).toBeVisible();
 

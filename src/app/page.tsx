@@ -149,6 +149,15 @@ export default function Home() {
     setDashboard(response.dashboard);
   }
 
+  async function refreshSessions() {
+    const response = await requestGraphql<SessionsResponse>(sessionsQuery);
+    setSessions(response.sessions);
+  }
+
+  async function refreshDashboardAndSessions() {
+    await Promise.all([refreshDashboard(), refreshSessions()]);
+  }
+
   useEffect(() => {
     let isCurrent = true;
 
@@ -220,7 +229,10 @@ export default function Home() {
       const response = await requestGraphql<CreateSessionResponse>(createSessionMutation, {
         name: sessionName,
       });
-      setSessions((current) => [...current, response.createSession]);
+      setSessions((current) => [
+        response.createSession,
+        ...current.filter((session) => session.id !== response.createSession.id),
+      ]);
       setSessionName("");
       setIsSessionDialogOpen(false);
       await selectSession(response.createSession.id);
@@ -245,7 +257,7 @@ export default function Home() {
         name: personName,
       });
       setPersonName("");
-      await refreshDashboard();
+      await refreshDashboardAndSessions();
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -281,7 +293,7 @@ export default function Home() {
       });
       setDescription("");
       setAmount("");
-      await refreshDashboard();
+      await refreshDashboardAndSessions();
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -301,7 +313,7 @@ export default function Home() {
         sessionId: selectedSessionId,
         id: expenseId,
       });
-      await refreshDashboard();
+      await refreshDashboardAndSessions();
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {

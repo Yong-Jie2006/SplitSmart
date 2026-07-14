@@ -12,3 +12,4 @@
 - [x] Scope every dashboard action and state to the selected session.
 - [x] Verify the complete multi-session flow with Playwright and final checks.
 - [x] Replace the compact session selector with a responsive sidebar and active-session page heading.
+- [x] Order sessions by persisted recent activity and refresh the sidebar after dashboard mutations.

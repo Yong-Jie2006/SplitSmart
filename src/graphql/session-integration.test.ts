@@ -56,6 +56,32 @@ describe.skipIf(!testDatabaseUrl)("expense session GraphQL integration", () => {
     ]);
   });
 
+  it("orders sessions by their latest dashboard activity", async () => {
+    const tripId = await createSession("Trip to Ampang");
+    const payerId = await addPerson(tripId, "Ali");
+    await createSession("Sunway");
+
+    expect(await getSessionNames()).toEqual([
+      "Sunway",
+      "Trip to Ampang",
+      "Default session",
+    ]);
+
+    const { expenseSessions } = await import("@/db/schema");
+    await database.db
+      .update(expenseSessions)
+      .set({ updatedAt: new Date("2020-01-01T00:00:00.000Z") });
+
+    await addExpense(tripId, {
+      description: "Dinner",
+      amountCents: 5_000,
+      paidByPersonId: payerId,
+      participantIds: [payerId],
+    });
+
+    expect((await getSessionNames())[0]).toBe("Trip to Ampang");
+  });
+
   it("isolates people, expenses, balances, settlements, and deletion by session", async () => {
     const baliId = await createSession("Bali Trip");
     const dinnerId = await createSession("Weekend Dinner");
@@ -194,6 +220,14 @@ describe.skipIf(!testDatabaseUrl)("expense session GraphQL integration", () => {
     `, { sessionId });
     expect(result.errors).toBeUndefined();
     return result.data?.dashboard as DashboardResult;
+  }
+
+  async function getSessionNames(): Promise<string[]> {
+    const result = await execute(`
+      query Sessions { sessions { name } }
+    `);
+    expect(result.errors).toBeUndefined();
+    return (result.data?.sessions as Array<{ name: string }>).map((session) => session.name);
   }
 });
 

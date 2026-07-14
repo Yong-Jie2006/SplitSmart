@@ -9,3 +9,4 @@
 - Drizzle generated required session columns immediately, which would fail on populated tables; the migration was reordered to backfill a Default session before applying `NOT NULL`.
 - A one-off GraphQL smoke command did not load `.env`; it was rerun with the environment file explicitly instead of weakening the app's required `DATABASE_URL` check.
 - The original browser test was coupled to a native session select; it now verifies the visible sidebar item, active state, and session heading instead.
+- A client-only recent-session sort would be lost on refresh; session activity is now persisted in PostgreSQL and returned in deterministic order.

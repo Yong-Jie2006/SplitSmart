@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import { createSchema } from "graphql-yoga";
 import { z } from "zod";
@@ -22,6 +22,7 @@ const typeDefs = /* GraphQL */ `
     id: ID!
     name: String!
     createdAt: String!
+    updatedAt: String!
   }
 
   type Person {
@@ -144,7 +145,11 @@ export const schema = createSchema({
         const rows = await db
           .select()
           .from(expenseSessions)
-          .orderBy(asc(expenseSessions.createdAt), asc(expenseSessions.id));
+          .orderBy(
+            desc(expenseSessions.updatedAt),
+            desc(expenseSessions.createdAt),
+            desc(expenseSessions.id),
+          );
 
         return rows.map(toSessionRecord);
       },
@@ -163,13 +168,19 @@ export const schema = createSchema({
       },
       addPerson: async (_parent, args: { sessionId: unknown; name: unknown }) => {
         const input = parseInput(addPersonInput, args);
-        await requireSession(db, input.sessionId);
-        const [person] = await db
-          .insert(people)
-          .values({ sessionId: input.sessionId, name: input.name })
-          .returning();
+        return db.transaction(async (tx) => {
+          await requireSession(tx, input.sessionId);
+          const [person] = await tx
+            .insert(people)
+            .values({ sessionId: input.sessionId, name: input.name })
+            .returning();
+          await tx
+            .update(expenseSessions)
+            .set({ updatedAt: sql`now()` })
+            .where(eq(expenseSessions.id, input.sessionId));
 
-        return person;
+          return person;
+        });
       },
       addExpense: async (_parent, args: { sessionId: unknown; input: unknown }) => {
         const { sessionId } = parseInput(sessionInput, args);
@@ -212,6 +223,10 @@ export const schema = createSchema({
               shareCents: share.amountCents,
             })),
           );
+          await tx
+            .update(expenseSessions)
+            .set({ updatedAt: sql`now()` })
+            .where(eq(expenseSessions.id, sessionId));
 
           return [createdExpense];
         });
@@ -221,20 +236,27 @@ export const schema = createSchema({
       deleteExpense: async (_parent, args: { sessionId: unknown; id: unknown }) => {
         const sessionId = parseInput(recordId, args.sessionId);
         const expenseId = parseInput(recordId, args.id);
-        await requireSession(db, sessionId);
-        const [deletedExpense] = await db
-          .delete(expenses)
-          .where(and(
-            eq(expenses.sessionId, sessionId),
-            eq(expenses.id, expenseId),
-          ))
-          .returning({ id: expenses.id });
+        return db.transaction(async (tx) => {
+          await requireSession(tx, sessionId);
+          const [deletedExpense] = await tx
+            .delete(expenses)
+            .where(and(
+              eq(expenses.sessionId, sessionId),
+              eq(expenses.id, expenseId),
+            ))
+            .returning({ id: expenses.id });
 
-        if (!deletedExpense) {
-          throw userInputError("Expense not found.");
-        }
+          if (!deletedExpense) {
+            throw userInputError("Expense not found.");
+          }
 
-        return deletedExpense;
+          await tx
+            .update(expenseSessions)
+            .set({ updatedAt: sql`now()` })
+            .where(eq(expenseSessions.id, sessionId));
+
+          return deletedExpense;
+        });
       },
     },
   },
@@ -313,10 +335,11 @@ async function getDashboard(sessionId: number): Promise<DashboardRecord> {
   });
 }
 
-function toSessionRecord(session: { id: number; name: string; createdAt: Date }) {
+function toSessionRecord(session: { id: number; name: string; createdAt: Date; updatedAt: Date }) {
   return {
     ...session,
     createdAt: session.createdAt.toISOString(),
+    updatedAt: session.updatedAt.toISOString(),
   };
 }
 
