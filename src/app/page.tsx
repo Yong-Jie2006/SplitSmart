@@ -324,7 +324,7 @@ export default function Home() {
             </section>
 
             <section className="rounded-xl border bg-card p-5 shadow-sm lg:col-span-2">
-              <SectionTitle icon={<ReceiptText />} title="Expense history" subtitle="Saved in Neon and split exactly to the cent." />
+              <SectionTitle icon={<ReceiptText />} title="Expense history" subtitle="The history of each expense made." />
               <div className="mt-5 divide-y rounded-lg border">
                 {dashboard?.expenses.length ? dashboard.expenses.map((expense) => (
                   <article key={expense.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
