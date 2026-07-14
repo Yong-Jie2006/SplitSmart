@@ -832,6 +832,7 @@ export default function Home() {
                           <div
                             key={`${settlement.from.id}-${settlement.to.id}-${index}`}
                             className="flex items-center gap-2 px-4 py-4 sm:px-5"
+                            aria-label={`${settlement.from.name} pays ${settlement.to.name}`}
                           >
                             <div className="flex min-w-0 flex-1 items-center gap-2">
                               <Avatar person={settlement.from} size="sm" />

@@ -14,7 +14,7 @@ test("records, settles, and deletes an unevenly split expense", async ({ page })
   await page.getByRole("button", { name: "Save expense" }).click();
 
   await expect(page.getByRole("heading", { name: "Dinner" })).toBeVisible();
-  const settlement = page.getByText("Bee pays Aisha", { exact: true }).locator("..");
+  const settlement = page.getByLabel("Bee pays Aisha");
   await expect(settlement).toBeVisible();
   await expect(settlement.getByText(/RM\s*5\.00/)).toBeVisible();
 
@@ -26,8 +26,7 @@ test("records, settles, and deletes an unevenly split expense", async ({ page })
 test("creates, switches, refreshes, and isolates expense sessions", async ({ page }) => {
   await page.goto("/");
 
-  await createSession(page, "Bali Trip");
-  const baliUrl = page.url();
+  const baliUrl = await createSession(page, "Bali Trip");
   for (const name of ["Ali", "Siti", "Kumar"]) {
     await addPerson(page, name);
   }
@@ -44,8 +43,7 @@ test("creates, switches, refreshes, and isolates expense sessions", async ({ pag
   await expect(balanceRow(balances, "Siti")).toContainText(/-RM\s*30\.00/);
   await expect(balanceRow(balances, "Kumar")).toContainText(/-RM\s*30\.00/);
 
-  await createSession(page, "Weekend Dinner");
-  const dinnerUrl = page.url();
+  const dinnerUrl = await createSession(page, "Weekend Dinner");
   await expect(page.getByText("No people yet. Add the participants for this session to begin.")).toBeVisible();
   for (const name of ["Mei", "Raj"]) {
     await addPerson(page, name);
@@ -106,11 +104,15 @@ test("opens session navigation on a small screen", async ({ page }) => {
 });
 
 async function createSession(page: import("@playwright/test").Page, name: string) {
+  await expect(page).toHaveURL(/[?&]session=[^&]+/);
+  const previousSessionId = new URL(page.url()).searchParams.get("session");
   await page.getByRole("button", { name: "New session" }).click();
   await page.getByLabel("Session name").fill(name);
   await page.getByRole("button", { name: "Create session" }).click();
   await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).searchParams.get("session")).not.toBe(previousSessionId);
+  return page.url();
 }
 
 async function addPerson(page: import("@playwright/test").Page, name: string) {

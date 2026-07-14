@@ -9,5 +9,10 @@ export default defineConfig({
   },
   test: {
     include: ["src/**/*.test.ts"],
+    server: {
+      deps: {
+        inline: [/graphql/],
+      },
+    },
   },
 });

@@ -7,6 +7,6 @@
 - Browser tests must use a separate database; the Playwright configuration refuses to start without `DATABASE_URL_TEST`.
 - The expense dialog preview initially ordered shares by the people list, which could disagree with the backend after reselecting a participant; it now preserves the submitted participant order.
 - Drizzle generated required session columns immediately, which would fail on populated tables; the migration was reordered to backfill a Default session before applying `NOT NULL`.
-- A one-off GraphQL smoke command did not load `.env`; it was rerun with the environment file explicitly instead of weakening the app's required `DATABASE_URL` check.
-- The original browser test was coupled to a native session select; it now verifies the visible sidebar item, active state, and session heading instead.
+- Database integration tests loaded GraphQL through two Vitest module realms and failed before assertions; GraphQL dependencies are now inlined so all 17 tests execute with one schema instance.
+- The redesigned settlement row broke a DOM-parent-dependent UAT selector, and session creation exposed an asynchronous URL assertion; the row now has an accessible label and the test waits for URL synchronization.
 - A client-only recent-session sort would be lost on refresh; session activity is now persisted in PostgreSQL and returned in deterministic order.
