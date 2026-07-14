@@ -102,7 +102,7 @@ type ExpenseRecord = {
   description: string;
   amountCents: number;
   paidBy: PersonRecord;
-  createdAt: Date;
+  createdAt: string;
   shares: Array<{ person: PersonRecord; amountCents: number }>;
 };
 
@@ -279,7 +279,9 @@ function toExpenseRecord(
     description: expense.description,
     amountCents: expense.amountCents,
     paidBy,
-    createdAt: expense.createdAt,
+    // GraphQL exposes this field as String; serialize the database Date
+    // explicitly so clients always receive a standards-compliant timestamp.
+    createdAt: expense.createdAt.toISOString(),
     shares: shares.map((share) => {
       const person = peopleById.get(share.personId);
       if (!person) {
