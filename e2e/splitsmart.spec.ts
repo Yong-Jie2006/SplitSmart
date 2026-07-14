@@ -6,7 +6,7 @@ test("records, settles, and deletes an unevenly split expense", async ({ page })
   for (const name of ["Aisha", "Bee"]) {
     await page.getByLabel("Person name").fill(name);
     await page.getByRole("button", { name: "Add", exact: true }).click();
-    await expect(page.getByText(name, { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("checkbox", { name })).toBeVisible();
   }
 
   await page.getByLabel("Description").fill("Dinner");
@@ -15,8 +15,9 @@ test("records, settles, and deletes an unevenly split expense", async ({ page })
   await page.getByRole("button", { name: "Add expense" }).click();
 
   await expect(page.getByRole("heading", { name: "Dinner" })).toBeVisible();
-  await expect(page.getByText("Bee pays Aisha", { exact: true })).toBeVisible();
-  await expect(page.getByText(/RM\s*5\.00/)).toBeVisible();
+  const settlement = page.getByText("Bee pays Aisha", { exact: true }).locator("..");
+  await expect(settlement).toBeVisible();
+  await expect(settlement.getByText(/RM\s*5\.00/)).toBeVisible();
 
   await page.getByRole("button", { name: "Delete Dinner" }).click();
   await page.getByRole("button", { name: "Delete expense" }).click();
