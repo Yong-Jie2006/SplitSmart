@@ -12,6 +12,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { presentBalance } from "@/lib/balance-presentation";
 import { requestGraphql } from "@/lib/graphql-client";
 
 type Person = {
@@ -325,16 +326,25 @@ export default function Home() {
             </section>
 
             <section className="rounded-xl border bg-card p-5 shadow-sm">
-              <SectionTitle icon={<CircleDollarSign />} title="Balances" subtitle="Positive means they should receive money." />
+              <SectionTitle icon={<CircleDollarSign />} title="Balances" subtitle="What each person should receive or repay." />
               <div className="mt-5 space-y-3">
-                {dashboard?.balances.length ? dashboard.balances.map((balance) => (
-                  <div key={balance.person.id} className="flex items-center justify-between rounded-lg border px-3 py-3">
-                    <span className="font-medium">{balance.person.name}</span>
-                    <span className={balance.amountCents > 0 ? "font-semibold text-emerald-700" : balance.amountCents < 0 ? "font-semibold text-rose-700" : "font-semibold text-muted-foreground"}>
-                      {balance.amountCents > 0 ? "+" : ""}{formatMoney(balance.amountCents)}
-                    </span>
-                  </div>
-                )) : <EmptyState message="Balances will appear after your first expense." />}
+                {dashboard?.balances.length ? dashboard.balances.map((balance) => {
+                  const presentation = presentBalance(balance.amountCents, formatMoney(Math.abs(balance.amountCents)));
+                  const toneClassName = presentation.tone === "receivable"
+                    ? "text-emerald-700"
+                    : presentation.tone === "payable"
+                      ? "text-rose-700"
+                      : "text-muted-foreground";
+
+                  return (
+                    <div key={balance.person.id} className="flex items-start justify-between gap-4 rounded-lg border px-3 py-3">
+                      <span className="min-w-0 break-words font-medium">{balance.person.name}</span>
+                      <span className={`max-w-[65%] text-right font-semibold sm:max-w-none sm:whitespace-nowrap ${toneClassName}`}>
+                        {presentation.wording}
+                      </span>
+                    </div>
+                  );
+                }) : <EmptyState message="Balances will appear after your first expense." />}
               </div>
             </section>
 

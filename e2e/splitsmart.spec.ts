@@ -47,6 +47,10 @@ test("shows an amount error at the field and accepts a corrected resubmission", 
 
   await expect(amountError).toBeHidden();
   await expect(page.getByRole("heading", { name: "Lunch" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Delete Lunch" }).click();
+  await page.getByRole("button", { name: "Delete expense" }).click();
+  await expect(page.getByRole("heading", { name: "Lunch" })).toBeHidden();
 });
 
 test("records, settles, and deletes an unevenly split expense", async ({ page }) => {
@@ -70,6 +74,13 @@ test("records, settles, and deletes an unevenly split expense", async ({ page })
   const settlement = page.getByText("Bee pays Aisha", { exact: true }).locator("..");
   await expect(settlement).toBeVisible();
   await expect(settlement.getByText(/RM\s*5\.00/)).toBeVisible();
+
+  const balancesSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Balances" }) });
+  const aishaBalance = balancesSection.getByText("Aisha", { exact: true }).locator("..");
+  const beeBalance = balancesSection.getByText("Bee", { exact: true }).locator("..");
+  await expect(aishaBalance.getByText(/gets back RM\s*5\.00/)).toBeVisible();
+  await expect(beeBalance.getByText(/owes RM\s*5\.00/)).toBeVisible();
+  await expect(page.getByText("settled", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Delete Dinner" }).click();
   await page.getByRole("button", { name: "Delete expense" }).click();
