@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import { createSchema } from "graphql-yoga";
 import { z } from "zod";
@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import {
   expenseParticipants,
+  expenseSessions,
   expenses,
   people,
 } from "@/db/schema";
@@ -17,6 +18,12 @@ import {
 } from "@/lib/money";
 
 const typeDefs = /* GraphQL */ `
+  type ExpenseSession {
+    id: ID!
+    name: String!
+    createdAt: String!
+  }
+
   type Person {
     id: ID!
     name: String!
@@ -67,28 +74,36 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Query {
-    dashboard: Dashboard!
+    sessions: [ExpenseSession!]!
+    dashboard(sessionId: ID!): Dashboard!
   }
 
   type Mutation {
-    addPerson(name: String!): Person!
-    addExpense(input: AddExpenseInput!): Expense!
-    deleteExpense(id: ID!): DeletedExpense!
+    createSession(name: String!): ExpenseSession!
+    addPerson(sessionId: ID!, name: String!): Person!
+    addExpense(sessionId: ID!, input: AddExpenseInput!): Expense!
+    deleteExpense(sessionId: ID!, id: ID!): DeletedExpense!
   }
 `;
 
-const addPersonInput = z.object({
+const nameInput = z.object({
   name: z.string().trim().min(1).max(100),
 });
 
-const personId = z.coerce.number().int().positive();
+const recordId = z.coerce.number().int().positive();
+
+const sessionInput = z.object({
+  sessionId: recordId,
+});
+
+const addPersonInput = sessionInput.extend(nameInput.shape);
 
 const addExpenseInput = z.object({
   description: z.string().trim().min(1).max(200),
   amountCents: z.number().int().positive(),
-  paidByPersonId: personId,
+  paidByPersonId: recordId,
   participantIds: z
-    .array(personId)
+    .array(recordId)
     .min(1)
     .refine((ids) => new Set(ids).size === ids.length, {
       message: "Each participant can appear only once.",
@@ -125,20 +140,41 @@ export const schema = createSchema({
   typeDefs,
   resolvers: {
     Query: {
-      dashboard: getDashboard,
+      sessions: async () => {
+        const rows = await db
+          .select()
+          .from(expenseSessions)
+          .orderBy(asc(expenseSessions.createdAt), asc(expenseSessions.id));
+
+        return rows.map(toSessionRecord);
+      },
+      dashboard: (_parent, args: { sessionId: unknown }) =>
+        getDashboard(parseInput(recordId, args.sessionId)),
     },
     Mutation: {
-      addPerson: async (_parent, args: { name: unknown }) => {
+      createSession: async (_parent, args: { name: unknown }) => {
+        const input = parseInput(nameInput, args);
+        const [session] = await db
+          .insert(expenseSessions)
+          .values({ name: input.name })
+          .returning();
+
+        return toSessionRecord(session);
+      },
+      addPerson: async (_parent, args: { sessionId: unknown; name: unknown }) => {
         const input = parseInput(addPersonInput, args);
+        await requireSession(db, input.sessionId);
         const [person] = await db
           .insert(people)
-          .values({ name: input.name })
+          .values({ sessionId: input.sessionId, name: input.name })
           .returning();
 
         return person;
       },
-      addExpense: async (_parent, args: { input: unknown }) => {
+      addExpense: async (_parent, args: { sessionId: unknown; input: unknown }) => {
+        const { sessionId } = parseInput(sessionInput, args);
         const input = parseInput(addExpenseInput, args.input);
+        await requireSession(db, sessionId);
         const requestedPersonIds = [
           input.paidByPersonId,
           ...input.participantIds,
@@ -146,10 +182,13 @@ export const schema = createSchema({
         const personRows = await db
           .select()
           .from(people)
-          .where(inArray(people.id, requestedPersonIds));
+          .where(and(
+            eq(people.sessionId, sessionId),
+            inArray(people.id, requestedPersonIds),
+          ));
 
         if (personRows.length !== new Set(requestedPersonIds).size) {
-          throw userInputError("The payer and every participant must exist.");
+          throw userInputError("The payer and every participant must belong to the selected session.");
         }
 
         const peopleById = new Map(personRows.map((person) => [person.id, person]));
@@ -159,6 +198,7 @@ export const schema = createSchema({
           const [createdExpense] = await tx
             .insert(expenses)
             .values({
+              sessionId,
               description: input.description,
               amountCents: input.amountCents,
               paidByPersonId: input.paidByPersonId,
@@ -178,11 +218,16 @@ export const schema = createSchema({
 
         return toExpenseRecord(expense, peopleById, shares);
       },
-      deleteExpense: async (_parent, args: { id: unknown }) => {
-        const expenseId = parseInput(personId, args.id);
+      deleteExpense: async (_parent, args: { sessionId: unknown; id: unknown }) => {
+        const sessionId = parseInput(recordId, args.sessionId);
+        const expenseId = parseInput(recordId, args.id);
+        await requireSession(db, sessionId);
         const [deletedExpense] = await db
           .delete(expenses)
-          .where(eq(expenses.id, expenseId))
+          .where(and(
+            eq(expenses.sessionId, sessionId),
+            eq(expenses.id, expenseId),
+          ))
           .returning({ id: expenses.id });
 
         if (!deletedExpense) {
@@ -195,14 +240,21 @@ export const schema = createSchema({
   },
 });
 
-async function getDashboard(): Promise<DashboardRecord> {
+async function getDashboard(sessionId: number): Promise<DashboardRecord> {
   return db.transaction(async (tx) => {
+    await requireSession(tx, sessionId);
     const [personRows, expenseRows, shareRows] = await Promise.all([
-      tx.select().from(people).orderBy(asc(people.id)),
-      tx.select().from(expenses).orderBy(asc(expenses.id)),
+      tx.select().from(people).where(eq(people.sessionId, sessionId)).orderBy(asc(people.id)),
+      tx.select().from(expenses).where(eq(expenses.sessionId, sessionId)).orderBy(asc(expenses.id)),
       tx
-        .select()
+        .select({
+          expenseId: expenseParticipants.expenseId,
+          personId: expenseParticipants.personId,
+          shareCents: expenseParticipants.shareCents,
+        })
         .from(expenseParticipants)
+        .innerJoin(expenses, eq(expenseParticipants.expenseId, expenses.id))
+        .where(eq(expenses.sessionId, sessionId))
         .orderBy(asc(expenseParticipants.expenseId), asc(expenseParticipants.personId)),
     ]);
     const peopleById = new Map(personRows.map((person) => [person.id, person]));
@@ -259,6 +311,29 @@ async function getDashboard(): Promise<DashboardRecord> {
     isolationLevel: "repeatable read",
     accessMode: "read only",
   });
+}
+
+function toSessionRecord(session: { id: number; name: string; createdAt: Date }) {
+  return {
+    ...session,
+    createdAt: session.createdAt.toISOString(),
+  };
+}
+
+type SessionReader = {
+  select: typeof db.select;
+};
+
+async function requireSession(reader: SessionReader, sessionId: number): Promise<void> {
+  const [session] = await reader
+    .select({ id: expenseSessions.id })
+    .from(expenseSessions)
+    .where(eq(expenseSessions.id, sessionId))
+    .limit(1);
+
+  if (!session) {
+    throw userInputError("Expense session not found.");
+  }
 }
 
 function toExpenseRecord(

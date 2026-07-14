@@ -43,11 +43,32 @@ describe("dashboard query", () => {
     ];
     let selectIndex = 0;
 
-    database.select.mockImplementation(() => ({
-      from: () => ({
-        orderBy: () => Promise.resolve(rows[selectIndex++]),
-      }),
-    }));
+    database.select.mockImplementation(() => {
+      const currentSelect = selectIndex++;
+
+      if (currentSelect === 0) {
+        return {
+          from: () => ({
+            where: () => ({ limit: () => Promise.resolve([{ id: 1 }]) }),
+          }),
+        };
+      }
+
+      const result = rows[currentSelect - 1];
+      const ordered = { orderBy: () => Promise.resolve(result) };
+
+      if (currentSelect === 3) {
+        return {
+          from: () => ({
+            innerJoin: () => ({ where: () => ordered }),
+          }),
+        };
+      }
+
+      return {
+        from: () => ({ where: () => ordered }),
+      };
+    });
     database.transaction.mockImplementation(async (callback: (tx: typeof database.tx) => unknown) => callback(database.tx));
 
     const resolveDashboard = schema.getQueryType()?.getFields().dashboard.resolve;
@@ -55,7 +76,7 @@ describe("dashboard query", () => {
       throw new Error("Dashboard resolver is missing.");
     }
 
-    const dashboard = await resolveDashboard(null, {}, undefined, {} as never);
+    const dashboard = await resolveDashboard(null, { sessionId: "1" }, undefined, {} as never);
 
     expect(dashboard).toMatchObject({
       people: [
@@ -83,6 +104,6 @@ describe("dashboard query", () => {
       isolationLevel: "repeatable read",
       accessMode: "read only",
     });
-    expect(database.select).toHaveBeenCalledTimes(3);
+    expect(database.select).toHaveBeenCalledTimes(4);
   });
 });
