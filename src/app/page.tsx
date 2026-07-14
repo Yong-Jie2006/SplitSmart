@@ -230,14 +230,10 @@ export default function Home() {
         {isLoading ? (
           <div className="rounded-xl border bg-card p-8 text-center text-muted-foreground">Loading your group…</div>
         ) : (
-          <div className={`grid gap-6 ${people.length ? "lg:grid-cols-[0.9fr_1.1fr]" : "mx-auto max-w-2xl"}`}>
-            <section className={`rounded-xl border bg-card shadow-sm ${people.length ? "p-5" : "p-6 sm:p-8"}`}>
-              <SectionTitle
-                icon={<Users />}
-                title={people.length ? "People" : "Start with your group"}
-                subtitle={people.length ? "Add everyone sharing expenses." : "Add your first person now. You can record expenses once someone is in the group."}
-              />
-              <form className="mt-5 flex flex-col gap-2 sm:flex-row" onSubmit={addPerson}>
+          <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <section className="rounded-xl border bg-card p-5 shadow-sm">
+              <SectionTitle icon={<Users />} title="People" subtitle="Add everyone sharing expenses." />
+              <form className="mt-5 flex gap-2" onSubmit={addPerson}>
                 <input
                   className={inputClassName}
                   value={personName}
@@ -247,8 +243,8 @@ export default function Home() {
                   required
                   aria-label="Person name"
                 />
-                <Button type="submit" className={people.length ? undefined : "sm:min-w-48"} disabled={isAddingPerson}>
-                  <Plus /> {isAddingPerson ? "Adding" : people.length ? "Add" : "Add your first person"}
+                <Button type="submit" disabled={isAddingPerson}>
+                  <Plus /> {isAddingPerson ? "Adding" : "Add"}
                 </Button>
               </form>
               <ul className="mt-5 divide-y rounded-lg border">
@@ -265,8 +261,6 @@ export default function Home() {
               </ul>
             </section>
 
-            {people.length ? (
-              <>
             <section className="rounded-xl border bg-card p-5 shadow-sm">
               <SectionTitle icon={<ReceiptText />} title="Add an expense" subtitle="Every expense is split equally among selected people." />
               <form className="mt-5 space-y-4" onSubmit={addExpense}>
@@ -395,8 +389,6 @@ export default function Home() {
                 )) : <EmptyState message="No expenses recorded yet." />}
               </div>
             </section>
-              </>
-            ) : null}
           </div>
         )}
       </div>

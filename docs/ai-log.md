@@ -8,5 +8,3 @@
 - The settlement algorithm is exact but may need a group-size limit before the app supports larger groups.
 - Expense amount parsing errors were initially routed through the page-level alert; they are now field-scoped, associated with the input, and focused after an invalid submission.
 - The Phase 1 browser run could not start because `DATABASE_URL_TEST` is absent; the test remains isolated rather than falling back to and resetting the application database.
-- Adding the onboarding browser scenario made later tests share its persisted person; those tests now select only their intended participants so balance assertions stay deterministic.
-- Read-only visual verification was attempted after the production build, but the in-app browser runtime failed during initialization; responsive Playwright assertions remain at mobile and desktop widths.
