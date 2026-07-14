@@ -8,6 +8,6 @@
 - [x] Add an expense-session model and migrate existing data into a Default session.
 - [x] Scope the GraphQL API and correctness checks to a selected session.
 - [x] Cover session isolation with API integration tests.
-- [ ] Add a URL-backed session switcher and new-session dialog.
+- [x] Add a URL-backed session switcher and new-session dialog.
 - [ ] Scope every dashboard action and state to the selected session.
 - [ ] Verify the complete multi-session flow with Playwright and final checks.

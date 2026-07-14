@@ -1,6 +1,7 @@
 "use client";
 
-import { Check, CircleDollarSign, HandCoins, Plus, ReceiptText, Trash2, Users } from "lucide-react";
+import { Check, ChevronDown, CircleDollarSign, HandCoins, Plus, ReceiptText, Trash2, Users } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import {
@@ -12,11 +13,25 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { requestGraphql } from "@/lib/graphql-client";
 
 type Person = {
   id: string;
   name: string;
+};
+
+type ExpenseSession = {
+  id: string;
+  name: string;
+  createdAt: string;
 };
 
 type Expense = {
@@ -50,9 +65,23 @@ type DashboardResponse = {
   dashboard: Dashboard;
 };
 
+type SessionsResponse = {
+  sessions: ExpenseSession[];
+};
+
+type CreateSessionResponse = {
+  createSession: ExpenseSession;
+};
+
+const sessionsQuery = /* GraphQL */ `
+  query Sessions {
+    sessions { id name createdAt }
+  }
+`;
+
 const dashboardQuery = /* GraphQL */ `
-  query Dashboard {
-    dashboard {
+  query Dashboard($sessionId: ID!) {
+    dashboard(sessionId: $sessionId) {
       people { id name }
       expenses {
         id description amountCents createdAt
@@ -62,6 +91,12 @@ const dashboardQuery = /* GraphQL */ `
       balances { person { id name } amountCents }
       settlements { from { id name } to { id name } amountCents }
     }
+  }
+`;
+
+const createSessionMutation = /* GraphQL */ `
+  mutation CreateSession($name: String!) {
+    createSession(name: $name) { id name createdAt }
   }
 `;
 
@@ -84,6 +119,10 @@ const deleteExpenseMutation = /* GraphQL */ `
 `;
 
 export default function Home() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [sessions, setSessions] = useState<ExpenseSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState("");
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -95,19 +134,45 @@ export default function Home() {
   const [amount, setAmount] = useState("");
   const [payerId, setPayerId] = useState("");
   const [participantIds, setParticipantIds] = useState<string[] | null>(null);
+  const [isSessionDialogOpen, setIsSessionDialogOpen] = useState(false);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [sessionName, setSessionName] = useState("");
 
   async function refreshDashboard() {
-    const response = await requestGraphql<DashboardResponse>(dashboardQuery);
+    if (!selectedSessionId) {
+      return;
+    }
+    const response = await requestGraphql<DashboardResponse>(dashboardQuery, {
+      sessionId: selectedSessionId,
+    });
     setDashboard(response.dashboard);
   }
 
   useEffect(() => {
     let isCurrent = true;
 
-    void requestGraphql<DashboardResponse>(dashboardQuery)
-      .then((response) => {
+    void requestGraphql<SessionsResponse>(sessionsQuery)
+      .then(async (response) => {
+        const requestedSessionId = new URLSearchParams(window.location.search).get("session");
+        const selectedSession = response.sessions.find(
+          (session) => session.id === requestedSessionId,
+        ) ?? response.sessions[0];
+
         if (isCurrent) {
-          setDashboard(response.dashboard);
+          setSessions(response.sessions);
+          setSelectedSessionId(selectedSession?.id ?? "");
+        }
+
+        if (selectedSession) {
+          const dashboardResponse = await requestGraphql<DashboardResponse>(dashboardQuery, {
+            sessionId: selectedSession.id,
+          });
+          if (isCurrent) {
+            setDashboard(dashboardResponse.dashboard);
+            if (requestedSessionId !== selectedSession.id) {
+              router.replace(`${pathname}?session=${selectedSession.id}`);
+            }
+          }
         }
       })
       .catch((reason: unknown) => {
@@ -124,7 +189,46 @@ export default function Home() {
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [pathname, router]);
+
+  async function selectSession(sessionId: string) {
+    setSelectedSessionId(sessionId);
+    setDashboard(null);
+    setPayerId("");
+    setParticipantIds(null);
+    setError(null);
+    setIsLoading(true);
+    router.push(`${pathname}?session=${sessionId}`);
+
+    try {
+      const response = await requestGraphql<DashboardResponse>(dashboardQuery, { sessionId });
+      setDashboard(response.dashboard);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function createSession(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setIsCreatingSession(true);
+
+    try {
+      const response = await requestGraphql<CreateSessionResponse>(createSessionMutation, {
+        name: sessionName,
+      });
+      setSessions((current) => [...current, response.createSession]);
+      setSessionName("");
+      setIsSessionDialogOpen(false);
+      await selectSession(response.createSession.id);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setIsCreatingSession(false);
+    }
+  }
 
   async function addPerson(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -209,12 +313,62 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-muted/40">
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-1 text-sm font-medium text-muted-foreground">Shared expenses, simplified</p>
             <h1 className="text-3xl font-bold tracking-tight">SplitSmart</h1>
           </div>
-          <p className="text-sm text-muted-foreground">All amounts are in Malaysian ringgit (RM).</p>
+          <div className="flex flex-col gap-2 sm:items-end">
+            <p className="text-sm text-muted-foreground">All amounts are in Malaysian ringgit (RM).</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="relative">
+                <span className="sr-only">Expense session</span>
+                <select
+                  className="h-9 min-w-44 appearance-none rounded-lg border bg-background py-1 pl-3 pr-9 text-sm font-medium outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  value={selectedSessionId}
+                  onChange={(event) => void selectSession(event.target.value)}
+                  disabled={!sessions.length || isLoading}
+                  aria-label="Expense session"
+                >
+                  {sessions.map((session) => (
+                    <option key={session.id} value={session.id}>{session.name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-2.5 size-4 text-muted-foreground" />
+              </label>
+              <Dialog open={isSessionDialogOpen} onOpenChange={setIsSessionDialogOpen}>
+                <DialogTrigger render={<Button type="button" variant="outline" />}>
+                  <Plus /> New session
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogTitle className="text-lg font-semibold">Create expense session</DialogTitle>
+                  <DialogDescription className="mt-2 text-sm leading-6 text-muted-foreground">
+                    Start a separate space for its own people, expenses, balances, and settlements.
+                  </DialogDescription>
+                  <form className="mt-5 space-y-5" onSubmit={createSession}>
+                    <label className="grid gap-1.5 text-sm font-medium">
+                      Session name
+                      <input
+                        className={inputClassName}
+                        value={sessionName}
+                        onChange={(event) => setSessionName(event.target.value)}
+                        placeholder="e.g. Bali Trip"
+                        maxLength={100}
+                        required
+                        autoFocus
+                      />
+                    </label>
+                    <div className="flex justify-end gap-3">
+                      <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+                      <Button type="submit" disabled={isCreatingSession}>
+                        <Plus /> {isCreatingSession ? "Creating..." : "Create session"}
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
         </header>
 
         {error ? (
