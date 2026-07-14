@@ -454,14 +454,6 @@ export default function Home() {
               >
                 <UserPlus /> <span className="hidden sm:inline">Add person</span>
               </Button>
-              <Button
-                type="button"
-                size="lg"
-                disabled={!canAddExpense}
-                onClick={openExpenseDialog}
-              >
-                <Plus /> <span className="hidden sm:inline">Add </span>expense
-              </Button>
             </div>
           </div>
         </header>
@@ -663,7 +655,7 @@ export default function Home() {
           </DialogContent>
         </Dialog>
 
-        <div className="mx-auto w-full max-w-7xl px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:py-8">
+        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           {error ? (
             <div className="mb-6 rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3 text-sm text-destructive" role="alert">
               {error}
@@ -715,7 +707,16 @@ export default function Home() {
                     <SectionHeading
                       title="Recent expenses"
                       subtitle="Every shared purchase in this session."
-                      action={`${dashboard?.expenses.length ?? 0} total`}
+                      action={(
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                            {dashboard?.expenses.length ?? 0} total
+                          </span>
+                          <Button type="button" size="sm" onClick={openExpenseDialog}>
+                            <Plus /> Add expense
+                          </Button>
+                        </div>
+                      )}
                     />
                     <div className="border-t">
                       {dashboard?.expenses.length ? dashboard.expenses.map((expense) => (
@@ -862,18 +863,6 @@ export default function Home() {
           )}
         </div>
 
-        {people.length ? (
-          <div className="fixed inset-x-4 bottom-4 z-20 lg:hidden">
-            <Button
-              type="button"
-              size="lg"
-              className="h-11 w-full shadow-lg"
-              onClick={openExpenseDialog}
-            >
-              <Plus /> Add expense
-            </Button>
-          </div>
-        ) : null}
       </div>
     </main>
   );
@@ -1074,7 +1063,7 @@ function SectionHeading({
 }: {
   title: string;
   subtitle: string;
-  action?: string;
+  action?: React.ReactNode;
 }) {
   return (
     <div className="flex items-start justify-between gap-4 px-4 py-4 sm:px-5 sm:py-5">
@@ -1082,7 +1071,7 @@ function SectionHeading({
         <h2 className="font-semibold tracking-tight">{title}</h2>
         <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{subtitle}</p>
       </div>
-      {action ? <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{action}</span> : null}
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
