@@ -54,3 +54,5 @@ real-payment/bank integrations, or a mobile app.
 Only add extras after the core is complete. Possible extras include multiple
 groups, expense editing/deletion, categories and filters, charts, CSV export,
 receipt images, activity history, dark mode, and deployment.
+
+test
